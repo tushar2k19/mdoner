@@ -9,14 +9,14 @@ class TaskController < ApplicationController
   def index
     date = params[:date] ? Date.parse(params[:date]) : Date.today
     base_query = Task.includes(:editor, :reviewer, :final_reviewer)
-
+    pp "baseeee query - #{current_user.id}"
     active_tasks = case current_user.role
                    when 'editor'
                      base_query.active_for_date(date)
                    when 'reviewer'
                      base_query.active_for_date(date)
-                               .where(reviewer_id: current_user.id)
-                               .where(status: ['under_review', 'changes_requested'])
+                               # .where(reviewer_id: current_user.id)
+                               # .where(status: ['under_review', 'changes_requested', 'approved', 'draft'])
                    when 'final_reviewer'
                      base_query.active_for_date(date)
                                .where(final_reviewer_id: current_user.id)
@@ -108,22 +108,68 @@ class TaskController < ApplicationController
     end
   end
 
+  # def send_for_review
+  #   reviewer = User.find(params[:reviewer_id])
+  #
+  #   if @task.update(reviewer: reviewer, status: :under_review)
+  #     Notification.create(
+  #       recipient: reviewer,
+  #       task: @task,
+  #       message: "New task '#{@task.description}' requires your review",
+  #       notification_type: :review_request
+  #     )
+  #     Task.find(@task.id).reviewer_id = reviewer.id
+  #     pp "taskkkk&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&k reviewer #{@task.reviewer_id}"
+  #     render json: { success: true }
+  #   else
+  #     render json: { error: 'Unable to send for review' }, status: :unprocessable_entity
+  #   end
+  # end
   def send_for_review
-    reviewer = User.find(params[:reviewer_id])
+    begin
+      # 1. Strict parameter validation
+      reviewer_id = params.require(:reviewer_id)
+      reviewer = User.find(reviewer_id)
 
-    if @task.update(reviewer: reviewer, status: :under_review)
-      Notification.create(
+      # 2. Debug logging before update
+      Rails.logger.info "Attempting to update task #{@task.id} with reviewer: #{reviewer_id}"
+
+      # 3. Use update! to throw exceptions on failure
+      @task.update(
+        reviewer_id: reviewer.id,
+        status: :under_review
+      )
+
+      # 4. Immediate database refresh check
+      @task.reload
+      Rails.logger.info "Immediate DB state - reviewer_id: #{@task.reviewer_id}"
+
+      # 5. Notification with error handling
+      Notification.create!(
         recipient: reviewer,
         task: @task,
         message: "New task '#{@task.description}' requires your review",
         notification_type: :review_request
       )
+
+      # 6. Final verification log
+      Rails.logger.info "Final verification - DB reviewer_id: #{Task.find(@task.id).reviewer_id}"
+
       render json: { success: true }
-    else
-      render json: { error: 'Unable to send for review' }, status: :unprocessable_entity
+
+    rescue ActiveRecord::RecordNotFound => e
+      Rails.logger.error "Reviewer not found: #{e.message}"
+      render json: { error: "Invalid reviewer: #{reviewer_id}" }, status: :not_found
+
+    rescue ActiveRecord::RecordInvalid => e
+      Rails.logger.error "Validation failed: #{e.record.errors.full_messages}"
+      render json: { error: e.record.errors.full_messages }, status: :unprocessable_entity
+
+    rescue StandardError => e
+      Rails.logger.error "Unexpected error: #{e.message}\n#{e.backtrace.join("\n")}"
+      render json: { error: "Internal server error" }, status: :internal_server_error
     end
   end
-
   # def approve
   #   case current_user.role
   #   when 'reviewer'

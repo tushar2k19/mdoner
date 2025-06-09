@@ -5,6 +5,7 @@ class Task < ApplicationRecord
 
   has_many :comments, dependent: :destroy
   has_many :notifications, dependent: :destroy
+  before_save :highlight_dates_in_content
 
   enum status: {
     draft: 0,
@@ -21,7 +22,7 @@ class Task < ApplicationRecord
   before_save :sanitize_content
 
   scope :active_for_date, ->(date) {
-    where('DATE(created_at) <= ? AND completed_at IS NULL', date)
+    where('DATE(created_at) <= ?', date)
   }
 
   scope :completed_for_date, ->(date) {
@@ -43,6 +44,15 @@ class Task < ApplicationRecord
       action_to_be_taken,
       tags: %w[p br div span b i u ul ol li table tr td th strong em font],
       attributes: %w[style class color align]
+    )
+  end
+
+  def highlight_dates_in_content
+    return unless action_to_be_taken.present?
+
+    self.action_to_be_taken = action_to_be_taken.gsub(
+      /(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)/,
+      '<span style="background-color: yellow">\1</span>'
     )
   end
 end
