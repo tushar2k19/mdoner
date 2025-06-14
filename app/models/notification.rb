@@ -5,13 +5,6 @@ class Notification < ApplicationRecord
 
   validates :message, presence: true
 
-  # enum notification_type: {
-  #   review_request: 0,
-  #   comment: 1,
-  #   task_approved: 2,
-  #   changes_requested: 3,
-  #   task_completed: 4
-  # }
   enum notification_type: {
     review_request: 'review_request',
     comment: 'comment',

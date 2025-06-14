@@ -15,22 +15,22 @@ class TaskController < ApplicationController
                      base_query.active_for_date(date)
                    when 'reviewer'
                      base_query.active_for_date(date)
-                               # .where(reviewer_id: current_user.id)
+                               .where(reviewer_id: current_user.id)
                                # .where(status: ['under_review', 'changes_requested', 'approved', 'draft'])
                    when 'final_reviewer'
                      base_query.active_for_date(date)
                                .where(final_reviewer_id: current_user.id)
-                               .where(status: 'final_review')
+                               # .where(status: 'final_review')
                    end.order(created_at: :desc)
 
     completed_tasks = case current_user.role
                       when 'editor'
-                        base_query.completed_for_date(date)
+                        base_query.completed_till_date(date)
                       when 'reviewer'
-                        base_query.completed_for_date(date)
+                        base_query.completed_till_date(date)
                                   .where(reviewer_id: current_user.id)
                       when 'final_reviewer'
-                        base_query.completed_for_date(date)
+                        base_query.completed_till_date(date)
                                   .where(final_reviewer_id: current_user.id)
                       end.order(completed_at: :desc)
 
@@ -89,7 +89,7 @@ class TaskController < ApplicationController
 
   def update
     if @task.update(task_params)
-      if @task.approved? && task_params[:status] != 'approved'
+      if @task.approved? #&& task_params[:status] != 'approved'     #change
         @task.update(status: :draft, reviewer_id: nil, final_reviewer_id: nil)
       end
       render json: { success: true, data: @task }
@@ -98,7 +98,7 @@ class TaskController < ApplicationController
     end
   end
 
-  def destroy
+  def destroy   #change soft delete
     pp"task = #{@task}, @task.editor = #{@task.editor}, current_user = #{current_user}"
     if  @task #current_user == @task.editor && @task.draft?
       @task.destroy
@@ -108,55 +108,21 @@ class TaskController < ApplicationController
     end
   end
 
-  # def send_for_review
-  #   reviewer = User.find(params[:reviewer_id])
-  #
-  #   if @task.update(reviewer: reviewer, status: :under_review)
-  #     Notification.create(
-  #       recipient: reviewer,
-  #       task: @task,
-  #       message: "New task '#{@task.description}' requires your review",
-  #       notification_type: :review_request
-  #     )
-  #     Task.find(@task.id).reviewer_id = reviewer.id
-  #     pp "taskkkk&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&k reviewer #{@task.reviewer_id}"
-  #     render json: { success: true }
-  #   else
-  #     render json: { error: 'Unable to send for review' }, status: :unprocessable_entity
-  #   end
-  # end
   def send_for_review
     begin
-      # 1. Strict parameter validation
       reviewer_id = params.require(:reviewer_id)
       reviewer = User.find(reviewer_id)
-
-      # 2. Debug logging before update
-      Rails.logger.info "Attempting to update task #{@task.id} with reviewer: #{reviewer_id}"
-
-      # 3. Use update! to throw exceptions on failure
       @task.update(
         reviewer_id: reviewer.id,
         status: :under_review
       )
-
-      # 4. Immediate database refresh check
-      @task.reload
-      Rails.logger.info "Immediate DB state - reviewer_id: #{@task.reviewer_id}"
-
-      # 5. Notification with error handling
       Notification.create!(
         recipient: reviewer,
         task: @task,
         message: "New task '#{@task.description}' requires your review",
         notification_type: :review_request
       )
-
-      # 6. Final verification log
-      Rails.logger.info "Final verification - DB reviewer_id: #{Task.find(@task.id).reviewer_id}"
-
       render json: { success: true }
-
     rescue ActiveRecord::RecordNotFound => e
       Rails.logger.error "Reviewer not found: #{e.message}"
       render json: { error: "Invalid reviewer: #{reviewer_id}" }, status: :not_found
@@ -196,10 +162,8 @@ class TaskController < ApplicationController
     case current_user.role
     when 'reviewer'
       if @task.under_review?
-        # Instead of moving to final review, directly complete the task
         if @task.update(
-          status: :completed,
-          completed_at: Time.current,
+          status: :approved,
           final_reviewer_id: @task.reviewer_id  # Set final_reviewer to same as reviewer
         )
           notify_task_completion
@@ -214,6 +178,27 @@ class TaskController < ApplicationController
       render json: { error: 'Unauthorized' }, status: :unauthorized
     end
   end
+  def complete
+    if @task.update(completed_at: Time.current, status: :completed)
+      notify_completion
+      render json: { success: true }
+    else
+      render json: { error: 'Unable to mark task as complete' }, status: :unprocessable_entity
+    end
+  end
+  def mark_incomplete
+    if @task.update(
+      status: :draft,
+      reviewer_id: nil,
+      final_reviewer_id: nil,
+      completed_at: nil
+    )
+      notify_incomplete
+      render json: { success: true }
+    else
+      render json: { error: 'Unable to mark task as incomplete' }, status: :unprocessable_entity
+    end
+  end
 
   private
 
@@ -226,29 +211,6 @@ class TaskController < ApplicationController
         message: "Task '#{@task.description}' has been approved",
         notification_type: :task_completed
       )
-    end
-  end
-
-  def complete
-    if @task.update(completed_at: Time.current, status: :completed)
-      notify_completion
-      render json: { success: true }
-    else
-      render json: { error: 'Unable to mark task as complete' }, status: :unprocessable_entity
-    end
-  end
-
-  def mark_incomplete
-    if @task.update(
-      status: :draft,
-      reviewer_id: nil,
-      final_reviewer_id: nil,
-      completed_at: nil
-    )
-      notify_incomplete
-      render json: { success: true }
-    else
-      render json: { error: 'Unable to mark task as incomplete' }, status: :unprocessable_entity
     end
   end
 
@@ -291,7 +253,7 @@ class TaskController < ApplicationController
   end
 
   def notify_completion
-    [@task.editor, @task.reviewer, @task.final_reviewer].compact.each do |user|
+    [@task.editor, @task.reviewer, @task.final_reviewer].compact.each do |user|  #change
       Notification.create(
         recipient: user,
         task: @task,
@@ -302,7 +264,7 @@ class TaskController < ApplicationController
   end
 
   def notify_incomplete
-    [@task.editor, @task.reviewer, @task.final_reviewer].compact.each do |user|
+    [@task.editor, @task.reviewer, @task.final_reviewer].compact.each do |user|  #change
       Notification.create(
         recipient: user,
         task: @task,

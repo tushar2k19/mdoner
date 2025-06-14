@@ -22,23 +22,14 @@ class Task < ApplicationRecord
   before_save :sanitize_content
 
   scope :active_for_date, ->(date) {
-    where('DATE(created_at) <= ?', date)
+    where('DATE(created_at) <= ?', date)   #scope :truly_active, -> { where.not(status: 'completed') }
   }
 
-  scope :completed_for_date, ->(date) {
-    where('DATE(completed_at) = ?', date)
-  }
-
-  scope :for_reviewer, ->(user_id) {
-    where(reviewer_id: user_id)
-  }
-
-  scope :for_final_reviewer, ->(user_id) {
-    where(final_reviewer_id: user_id)
+  scope :completed_till_date, ->(date) {
+    where('DATE(completed_at) <= ?', date)
   }
 
   private
-
   def sanitize_content
     self.action_to_be_taken = ActionController::Base.helpers.sanitize(
       action_to_be_taken,

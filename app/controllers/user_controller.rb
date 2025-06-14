@@ -7,12 +7,6 @@ class UserController < ApplicationController
 
     render json: users.map { |user| user_json(user) }
   end
-
-  def final_reviewers
-    users = User.where(role: :final_reviewer)
-    render json: users.map { |user| user_json(user) }
-  end
-
   private
 
   def user_json(user)
