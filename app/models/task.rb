@@ -1,16 +1,22 @@
 class Task < ApplicationRecord
+  acts_as_paranoid
   belongs_to :editor, class_name: 'User'
   belongs_to :reviewer, class_name: 'User', optional: true
-  belongs_to :final_reviewer, class_name: 'User', optional: true
+  # belongs_to :final_reviewer, class_name: 'User', optional: true
+  has_many :versions, class_name: 'TaskVersion', dependent: :destroy
+  belongs_to :current_version, class_name: 'TaskVersion', optional: true
 
-  has_many :comments, dependent: :destroy
-  has_many :notifications, dependent: :destroy
-  before_save :highlight_dates_in_content
+  # has_many :comments, dependent: :destroy
+  # has_many :notifications, dependent: :destroy
+  has_many :reviews, through: :versions
+
+
+  # before_save :highlight_dates_in_content
 
   enum status: {
     draft: 0,
     under_review: 1,
-    final_review: 2,
+    # final_review: 2,
     approved: 3,
     completed: 4
   }
@@ -28,6 +34,9 @@ class Task < ApplicationRecord
   scope :completed_till_date, ->(date) {
     where('DATE(completed_at) <= ?', date)
   }
+  def current_content
+    current_version&.action_nodes || []
+  end
 
   private
   def sanitize_content
