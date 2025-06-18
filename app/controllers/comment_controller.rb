@@ -8,7 +8,29 @@ class CommentController < ApplicationController
     comments = @task.comments.includes(:user).order(created_at: :desc)
     render json: comments.map { |comment| comment_json(comment) }
   end
+  def add_comment_trail
+    review_ids = Review.where(task_id: @task.id).pluck(:id)
+    comments = CommentTrail.where(review_id: review_ids)
+    show_list = comments.map  do |x|
+      x.comment
+    end
+    render json: {success: true, comments: show_list}
+  end
 
+  def get_comment_trail
+    review_ids = Review.where(task_id: @task.id).pluck(:id)
+    comments = CommentTrail.where(review_id: review_ids)
+    show_list = comments.pluck(:content)
+    render json: {success: true, comments: show_list}
+  end
+
+  def update_comment_trail
+
+  end
+
+  def del_comment_trail
+
+  end
   def create
     comment = @task.comments.build(comment_params.merge(user: current_user))
 

@@ -9,6 +9,9 @@ class Task < ApplicationRecord
   # has_many :comments, dependent: :destroy
   # has_many :notifications, dependent: :destroy
   has_many :reviews, through: :versions
+  
+  # Handle deletion properly
+  # before_destroy :clear_current_version_and_versions
 
 
   # before_save :highlight_dates_in_content
@@ -21,38 +24,52 @@ class Task < ApplicationRecord
     completed: 4
   }
 
-  validates :sector_division, :description, :action_to_be_taken,
-            :original_date, :responsibility, :review_date, presence: true
-
-  # Sanitize HTML from TinyMCE but allow certain tags and attributes
-  before_save :sanitize_content
+  validates :sector_division, :description, :original_date, :responsibility, :review_date, presence: true
 
   scope :active_for_date, ->(date) {
-    where('DATE(created_at) <= ?', date)   #scope :truly_active, -> { where.not(status: 'completed') }
+    where('DATE(created_at) <= ?', date)
   }
 
   scope :completed_till_date, ->(date) {
     where('DATE(completed_at) <= ?', date)
   }
+  
   def current_content
     current_version&.action_nodes || []
   end
 
-  private
-  def sanitize_content
-    self.action_to_be_taken = ActionController::Base.helpers.sanitize(
-      action_to_be_taken,
-      tags: %w[p br div span b i u ul ol li table tr td th strong em font],
-      attributes: %w[style class color align]
-    )
+  # Get formatted content from current version's nodes
+  def action_to_be_taken
+    current_version&.html_formatted_content || ''
   end
 
-  def highlight_dates_in_content
-    return unless action_to_be_taken.present?
+  # Custom destroy method to handle foreign key constraints
+  def destroy
+    ActiveRecord::Base.transaction do
+      # Clear current_version_id first to avoid foreign key constraint
+      if current_version_id
+        # Use update_column to bypass validations and callbacks
+        self.update_column(:current_version_id, nil)
+      end
+      # Then destroy all versions (which will cascade to action_nodes)
+      self.versions.destroy_all
+      # Finally destroy the task itself
+      super
+    end
+  end
 
-    self.action_to_be_taken = action_to_be_taken.gsub(
-      /(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)/,
-      '<span style="background-color: yellow">\1</span>'
-    )
+  private
+
+  def clear_current_version_and_versions
+    ActiveRecord::Base.transaction do
+      # Clear current_version_id first to avoid foreign key constraint
+      if current_version_id
+        # Use update_column to bypass validations and callbacks
+        self.update_column(:current_version_id, nil)
+      end
+      # Then destroy all versions (which will cascade to action_nodes)
+      # Use destroy_all to handle in a single transaction
+      self.versions.destroy_all
+    end
   end
 end

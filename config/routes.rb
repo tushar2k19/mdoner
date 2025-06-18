@@ -22,6 +22,7 @@ Rails.application.routes.draw do
     post 'task/:id/approve' => 'task#approve'
     post 'task/:id/complete' => 'task#complete'
     post 'task/:id/mark_incomplete' => 'task#mark_incomplete'
+    post 'task/:id/resolve_merge' => 'task#resolve_merge'
     get 'tasks/approved' => 'task#approved_tasks'
     get 'tasks/completed' => 'task#completed_tasks'
   end
@@ -42,5 +43,25 @@ Rails.application.routes.draw do
   controller :user do
     get 'users/reviewers' => 'user#reviewers'
     get 'users/final_reviewers' => 'user#final_reviewers'
+  end
+
+  # ActionNode routes nested under task versions
+  scope 'task_versions/:task_version_id' do
+    controller :action_node do
+      get 'nodes' => 'action_node#index'
+      post 'nodes' => 'action_node#create'
+      get 'nodes/:id' => 'action_node#show'
+      put 'nodes/:id' => 'action_node#update'
+      patch 'nodes/:id' => 'action_node#update'
+      delete 'nodes/:id' => 'action_node#destroy'
+      
+      # Special node operations
+      post 'nodes/add_point' => 'action_node#add_point'
+      post 'nodes/add_subpoint' => 'action_node#add_subpoint'
+      post 'nodes/:id/toggle_complete' => 'action_node#toggle_complete'
+      put 'nodes/:id/move' => 'action_node#move_node'
+      post 'nodes/bulk_update' => 'action_node#bulk_update'
+      post 'nodes/resort_by_date' => 'action_node#resort_by_date'
+    end
   end
 end

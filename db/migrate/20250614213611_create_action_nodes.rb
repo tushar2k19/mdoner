@@ -5,8 +5,8 @@ class CreateActionNodes < ActiveRecord::Migration[7.0]
       t.references :parent, foreign_key: { to_table: :action_nodes }  # Parent node for hierarchical structure
       t.text :content, null: false  # Actual content of the node (text)
       t.datetime :review_date  # Optional date for when this item should be reviewed
-      add_column :action_nodes, :level, :integer, default: 1
-      add_column :action_nodes, :list_style, :string, default: 'decimal' 
+      t.integer :level, default: 1  # Indentation level (1, 2, 3, 4...)
+      t.string :list_style, default: 'decimal'  # List formatting style
       # list_style options: 'decimal', 'lower-alpha', 'lower-roman', 'bullet'
       t.boolean :completed, default: false  # Marks if the item has been discussed/completed
       t.integer :position, null: false  # Order position within its parent

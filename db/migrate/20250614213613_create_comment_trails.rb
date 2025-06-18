@@ -5,8 +5,6 @@ class CreateCommentTrails < ActiveRecord::Migration[7.0]
       t.timestamps
     end
 
-    # Connect comments to trails instead of directly to tasks
-    add_reference :comments, :comment_trail, foreign_key: true
-    remove_reference :comments, :task  # Remove old task association
+    # Note: Comments table will already have comment_trail reference when created
   end
 end

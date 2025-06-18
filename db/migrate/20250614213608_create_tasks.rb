@@ -12,7 +12,7 @@ class CreateTasks < ActiveRecord::Migration[7.0]
       t.references :editor, foreign_key: { to_table: :users }
       t.references :reviewer, foreign_key: { to_table: :users }, null: true
       t.datetime :deleted_at  # Soft delete column
-      t.references :current_version, foreign_key: { to_table: :task_versions }  # Current approved version
+      # Removed current_version reference - will be added in separate migration
 
       t.timestamps
     end

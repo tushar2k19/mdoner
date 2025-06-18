@@ -11,8 +11,6 @@ class CreateTaskVersions < ActiveRecord::Migration[7.0]
       t.timestamps
     end
 
-    # Adds reference to current approved version on tasks table
-    add_column :tasks, :current_version_id, :bigint
-    add_foreign_key :tasks, :task_versions, column: :current_version_id
+    # Note: current_version_id will be added to tasks table in a separate migration
   end
 end
