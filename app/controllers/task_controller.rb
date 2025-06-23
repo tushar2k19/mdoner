@@ -32,17 +32,8 @@ class TaskController < ApplicationController
                      Task.none
                    end
 
-    # Sort by earliest review date from current version's nodes
-    sorted_active_tasks = active_tasks.sort_by do |task|
-      if task.current_version&.all_action_nodes&.any?
-        earliest_date = task.current_version.all_action_nodes
-                           .where.not(review_date: nil)
-                           .minimum(:review_date)
-        earliest_date || Date.new(9999) # Put tasks without dates at the end
-      else
-        task.review_date || Date.new(9999)
-      end
-    end
+    # No sorting - keep tasks in natural order (as saved)
+    sorted_active_tasks = active_tasks
 
     completed_tasks = case current_user.role
                       when 'editor'
@@ -95,17 +86,8 @@ class TaskController < ApplicationController
                        Task.none
                      end
 
-    # Sort by earliest review date from approved version's nodes
-    sorted_tasks = approved_tasks.sort_by do |task|
-      if task.current_version&.all_action_nodes&.any?
-        earliest_date = task.current_version.all_action_nodes
-                           .where.not(review_date: nil)
-                           .minimum(:review_date)
-        earliest_date || Date.new(9999)
-      else
-        task.review_date || Date.new(9999)
-      end
-    end
+    # No sorting - keep tasks in natural order (as saved)
+    sorted_tasks = approved_tasks
 
     render json: { 
       tasks: serialize_tasks_with_versions(sorted_tasks)
@@ -114,7 +96,7 @@ class TaskController < ApplicationController
 
   def completed_tasks
     date = params[:date] ? Date.parse(params[:date]) : Date.today
-    base_query = Task.includes(:editor, :reviewer, :final_reviewer)
+    base_query = Task.includes(:editor, :current_version)
                      .where.not(completed_at: nil)
                      .where('DATE(completed_at) <= ?', date)
 
@@ -122,12 +104,17 @@ class TaskController < ApplicationController
             when 'editor'
               base_query
             when 'reviewer'
-              base_query.where(reviewer_id: current_user.id)
-            when 'final_reviewer'
-              base_query.where(final_reviewer_id: current_user.id)
+              # Get tasks where this user was a reviewer for any version
+              task_ids = Review.joins(:task_version)
+                              .where(reviewer: current_user)
+                              .pluck('task_versions.task_id')
+                              .uniq
+              base_query.where(id: task_ids)
+            else
+              Task.none
             end.order(completed_at: :desc)
 
-    render json: { tasks: tasks }
+    render json: { tasks: serialize_tasks_with_versions(tasks) }
   end
 
   def create
@@ -158,6 +145,9 @@ class TaskController < ApplicationController
             node_type: 'paragraph'
           )
         end
+        
+        # Update task's review_date based on node dates
+        task.update_review_date_from_nodes
         
         render json: { 
           success: true, 
@@ -219,7 +209,7 @@ class TaskController < ApplicationController
           )
         end
         
-        # Resort nodes by review date
+        # Update task's review_date based on node dates (no sorting)
         current_version.update_and_resort_nodes
         
         render json: { 
@@ -252,6 +242,9 @@ class TaskController < ApplicationController
       current_version = @task.current_version
       return render json: { error: 'No current version found' }, status: :unprocessable_entity unless current_version
       
+      # Update current version status to under_review
+      current_version.update!(status: 'under_review')
+      
       # Find the last approved version for comparison (base version)
       base_version = @task.versions.where(status: 'approved').order(version_number: :desc).first
       
@@ -263,16 +256,23 @@ class TaskController < ApplicationController
         status: 'pending'
       )
       
-      # Update task status
+      # Update task status (remove reviewer_id as each version has its own reviewer)
       @task.update!(status: :under_review)
+      
+      # Determine if this is modified content or new task
+      content_type = if base_version && current_version.has_content_changes?
+                       'Modified content'
+                     else
+                       'New task'
+                     end
       
       # Create notification with review reference
       Notification.create!(
         recipient: reviewer,
         task: @task,
         review: review,
-        message: "New review requested for '#{@task.description}' - #{current_version.has_content_changes? ? 'Modified content' : 'New task'}",
-        notification_type: :review_request
+        message: "New review requested for '#{@task.description}' - #{content_type}",
+        notification_type: 'review_request'
       )
       
       render json: { 
@@ -379,8 +379,6 @@ class TaskController < ApplicationController
   def mark_incomplete
     if @task.update(
       status: :draft,
-      reviewer_id: nil,
-      final_reviewer_id: nil,
       completed_at: nil
     )
       notify_incomplete
@@ -574,16 +572,16 @@ class TaskController < ApplicationController
   end
 
   def notify_final_reviewer
-    Notification.create(
-      recipient: @task.final_reviewer,
-      task: @task,
-      message: "Task '#{@task.description}' needs final review",
-      notification_type: :review_request
-    )
+    # This method is no longer used since we removed final_reviewer concept
+    # Each version has its own reviewer through the Review model
+    Rails.logger.warn "notify_final_reviewer called but final_reviewer concept is deprecated"
   end
 
   def notify_approval
-    [@task.editor, @task.reviewer].each do |user|
+    # Get all reviewers who have been involved with this task
+    all_reviewers = @task.versions.joins(:reviews).pluck('reviews.reviewer_id').uniq.map { |id| User.find(id) }
+    
+    [@task.editor].concat(all_reviewers).uniq.each do |user|
       Notification.create(
         recipient: user,
         task: @task,
@@ -594,7 +592,10 @@ class TaskController < ApplicationController
   end
 
   def notify_completion
-    [@task.editor, @task.reviewer, @task.final_reviewer].compact.each do |user|  #change
+    # Get all reviewers who have been involved with this task
+    all_reviewers = @task.versions.joins(:reviews).pluck('reviews.reviewer_id').uniq.map { |id| User.find(id) }
+    
+    [@task.editor].concat(all_reviewers).uniq.each do |user|
       Notification.create(
         recipient: user,
         task: @task,
@@ -605,7 +606,10 @@ class TaskController < ApplicationController
   end
 
   def notify_incomplete
-    [@task.editor, @task.reviewer, @task.final_reviewer].compact.each do |user|  #change
+    # Get all reviewers who have been involved with this task
+    all_reviewers = @task.versions.joins(:reviews).pluck('reviews.reviewer_id').uniq.map { |id| User.find(id) }
+    
+    [@task.editor].concat(all_reviewers).uniq.each do |user|
       Notification.create(
         recipient: user,
         task: @task,

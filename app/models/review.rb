@@ -1,9 +1,9 @@
 # app/models/review.rb
 class Review < ApplicationRecord
   belongs_to :task_version
-  belongs_to :base_version, class_name: 'TaskVersion'
+  belongs_to :base_version, class_name: 'TaskVersion', optional: true
   belongs_to :reviewer, class_name: 'User'
-  has_many :comment_trails, dependent: :destroy
+  has_one :comment_trail, dependent: :destroy
   after_create :send_notifications
   after_update :update_task_status
   enum status: {
@@ -23,6 +23,50 @@ class Review < ApplicationRecord
       modified_nodes: modified_nodes
     }
   end
+
+  def added_nodes
+    # If base_version is nil (first review), all nodes are considered "added"
+    return task_version.all_action_nodes if base_version.nil?
+    
+    # Find nodes in task_version that don't exist in base_version
+    task_version.all_action_nodes.reject do |current_node|
+      base_version.all_action_nodes.any? do |base_node|
+        nodes_equivalent?(current_node, base_node)
+      end
+    end
+  end
+
+  def removed_nodes
+    # If base_version is nil (first review), no nodes are "removed"
+    return ActionNode.none if base_version.nil?
+    
+    # Find nodes in base_version that don't exist in task_version
+    base_version.all_action_nodes.reject do |base_node|
+      task_version.all_action_nodes.any? do |current_node|
+        nodes_equivalent?(current_node, base_node)
+      end
+    end
+  end
+
+  def modified_nodes
+    # If base_version is nil (first review), no nodes are "modified"
+    return ActionNode.none if base_version.nil?
+    
+    # Find nodes that exist in both versions but have different content
+    modified = []
+    task_version.all_action_nodes.each do |current_node|
+      base_node = base_version.all_action_nodes.find do |bn|
+        nodes_structurally_equivalent?(current_node, bn)
+      end
+      
+      if base_node && !nodes_content_equal?(current_node, base_node)
+        modified << current_node
+      end
+    end
+    
+    modified
+  end
+
   def forward_to(new_reviewer)
     transaction do
       update!(status: :forwarded)
@@ -41,6 +85,16 @@ class Review < ApplicationRecord
   end
 
   private
+  
+  def consistent_versions
+    # Skip validation if base_version is nil (first review)
+    return if base_version.nil?
+    
+    if task_version.task_id != base_version.task_id
+      errors.add(:base_version, "must belong to the same task")
+    end
+  end
+  
   def send_notifications
     # Notify reviewer
     Notification.create!(
@@ -62,25 +116,6 @@ class Review < ApplicationRecord
       )
     end
   end
-  def consistent_versions
-    if task_version.task_id != base_version.task_id
-      errors.add(:base_version, "must belong to the same task")
-    end
-  end
-  def added_nodes
-    task_version.action_nodes.where.not(id: base_version.action_nodes.pluck(:id))
-  end
-
-  def removed_nodes
-    base_version.action_nodes.where.not(id: task_version.action_nodes.pluck(:id))
-  end
-
-  def modified_nodes
-    task_version.action_nodes.joins(:base_version_copy)
-                .where.not(action_nodes: { content: base_version_copy[:content] })
-                .or(where.not(action_nodes: { review_date: base_version_copy[:review_date] }))
-                .or(where.not(action_nodes: { completed: base_version_copy[:completed] }))
-  end
   def update_task_status
     case status
     when 'approved'
@@ -89,5 +124,25 @@ class Review < ApplicationRecord
     when 'changes_requested'
       task_version.update!(status: :draft)
     end
+  end
+
+  def nodes_equivalent?(node1, node2)
+    # Compare content and structure, but not position (which can change)
+    node1.content.strip == node2.content.strip &&
+    node1.level == node2.level &&
+    node1.list_style == node2.list_style
+  end
+
+  def nodes_structurally_equivalent?(node1, node2)
+    # Check if nodes represent the same logical content
+    node1.content.strip == node2.content.strip &&
+    node1.level == node2.level &&
+    node1.list_style == node2.list_style
+  end
+
+  def nodes_content_equal?(node1, node2)
+    node1.content.strip == node2.content.strip &&
+    node1.review_date == node2.review_date &&
+    node1.completed == node2.completed
   end
 end

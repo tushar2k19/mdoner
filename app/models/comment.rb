@@ -14,7 +14,38 @@ class Comment < ApplicationRecord
 
   scope :resolved, -> { where(resolved: true) }
   scope :pending, -> { where(resolved: false) }
+  
+  # Check if this comment references a specific node
+  def references_node?
+    action_node_id.present?
+  end
+  
+  # Get the referenced node content for display (like WhatsApp reply preview)
+  def referenced_node_content
+    return nil unless references_node? && action_node
+    
+    # Strip HTML tags for clean preview and limit length
+    clean_content = strip_html_tags(action_node.content)
+    clean_content.length > 100 ? "#{clean_content[0..97]}..." : clean_content
+  end
+  
+  # Get the referenced node's display counter (1., a., i., etc.)
+  def referenced_node_counter
+    return nil unless references_node? && action_node
+    action_node.display_counter
+  end
+  
+  # Check if the referenced node still exists
+  def referenced_node_exists?
+    references_node? && action_node.present?
+  end
+
   private
+  
+  def strip_html_tags(html_content)
+    return '' unless html_content
+    html_content.gsub(/<[^>]*>/, '').strip
+  end
 
   def notify_relevant_users
     # relevant_users = [
@@ -29,9 +60,9 @@ class Comment < ApplicationRecord
       Notification.create(
         recipient: recipient,
         task: task,
+        review: comment_trail.review,
         message: "New comment on task '#{task.description}' by #{user.full_name}",
-        notification_type: 'comment',
-        comment_id: id
+        notification_type: 'comment'
       )
     end
   end

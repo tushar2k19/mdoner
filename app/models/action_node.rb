@@ -3,7 +3,7 @@ class ActionNode < ApplicationRecord
   belongs_to :task_version
   belongs_to :parent, class_name: 'ActionNode', optional: true
   has_many :children, class_name: 'ActionNode', foreign_key: 'parent_id', dependent: :destroy
-  has_many :comments, dependent: :destroy
+  has_many :comments, dependent: :nullify
 
   validates :node_type, presence: true,
             inclusion: { in: %w[paragraph point subpoint subsubpoint table rich_text]  #add others if necessary
@@ -92,17 +92,20 @@ class ActionNode < ApplicationRecord
 
   # Counter generation based on list style and position
   def display_counter
+    # Get the counter position within nodes of the same level and list style
+    counter_position = siblings_with_same_style.where('position <= ?', position).count
+    
     case list_style
     when 'decimal'
-      "#{position}"
+      "#{counter_position}"
     when 'lower-alpha'
-      (96 + position).chr # a, b, c...
+      (96 + counter_position).chr # a, b, c...
     when 'lower-roman'
-      to_roman(position).downcase
+      to_roman(counter_position).downcase
     when 'bullet'
       '•'
     else
-      position.to_s
+      counter_position.to_s
     end
   end
 
@@ -138,6 +141,16 @@ class ActionNode < ApplicationRecord
     counter = display_counter
     content_html = html_content
     
+    # Format review date if present
+    review_date_html = ""
+    if review_date.present?
+      formatted_date = review_date.strftime("%d/%m/%Y")
+      is_today = review_date.to_date == Date.current
+      date_classes = ["review-date"]
+      date_classes << "today" if is_today
+      review_date_html = %( <span class="#{date_classes.join(' ')}">#{formatted_date}</span>)
+    end
+    
     # Generate CSS classes based on level and list style
     css_classes = ["action-node", "level-#{level}", "style-#{list_style}"]
     css_classes << "completed" if completed
@@ -147,12 +160,12 @@ class ActionNode < ApplicationRecord
     when 'bullet'
       %(<div class="#{css_classes.join(' ')}">
           <span class="node-marker">#{counter}</span>
-          <span class="node-content">#{content_html}</span>
+          <span class="node-content">#{content_html}#{review_date_html}</span>
         </div>).html_safe
     else
       %(<div class="#{css_classes.join(' ')}">
           <span class="node-marker">#{counter}.</span>
-          <span class="node-content">#{content_html}</span>
+          <span class="node-content">#{content_html}#{review_date_html}</span>
         </div>).html_safe
     end
   end
@@ -204,6 +217,10 @@ class ActionNode < ApplicationRecord
 
   def siblings
     parent ? parent.children : task_version.action_nodes.where(parent_id: nil)
+  end
+
+  def siblings_with_same_style
+    parent ? parent.children.where(list_style: list_style) : task_version.action_nodes.where(parent_id: nil).where(list_style: list_style)
   end
 
   # Convert integer to Roman numeral

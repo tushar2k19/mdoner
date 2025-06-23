@@ -9,6 +9,9 @@ class SigninController < ApplicationController
       tokens = session.login
 
       signin_info = {
+        id: user.id,
+        first_name: user.first_name,
+        last_name: user.last_name,
         username: "#{user.first_name}" + " #{user.last_name}",
         role: user.role,
         email: user.email,

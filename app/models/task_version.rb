@@ -77,21 +77,17 @@ class TaskVersion < ApplicationRecord
 
   # Bulk update review dates and re-sort
   def update_and_resort_nodes
-    # Update parent nodes with earliest child dates
-    root_nodes = action_nodes.includes(:children)
-    root_nodes.each(&:update_review_date)
-    
-    # Resort all nodes by review date within their levels
-    resort_nodes_by_date
+    # Only update task's review_date based on nearest node dates - no sorting
+    task.update_review_date_from_nodes
   end
 
   # Check if this version has any content differences from base version
   def has_content_changes?
     return true unless base_version
     
-    # Compare node trees
-    current_nodes = all_action_nodes.pluck(:content, :level, :list_style, :review_date, :position).sort
-    base_nodes = base_version.all_action_nodes.pluck(:content, :level, :list_style, :review_date, :position).sort
+    # Compare node content without position (since we removed sorting)
+    current_nodes = all_action_nodes.pluck(:content, :level, :list_style, :review_date).sort
+    base_nodes = base_version.all_action_nodes.pluck(:content, :level, :list_style, :review_date).sort
     
     current_nodes != base_nodes
   end
@@ -251,81 +247,49 @@ class TaskVersion < ApplicationRecord
     end
   end
 
-  # Resort nodes by review date within their parent groups
-  def resort_nodes_by_date
-    # Resort root nodes
-    resort_node_group(action_nodes)
-    
-    # Resort children for each parent
-    action_nodes.each do |root_node|
-      resort_children_recursively(root_node)
-    end
-  end
-
-  # Resort a group of sibling nodes by review date
-  def resort_node_group(nodes)
-    sorted_nodes = nodes.sort_by { |n| [n.review_date || Date.new(9999), n.position] }
-    
-    sorted_nodes.each_with_index do |node, index|
-      node.update_column(:position, index + 1)
-    end
-  end
-
-  # Recursively resort children
-  def resort_children_recursively(parent_node)
-    if parent_node.children.any?
-      resort_node_group(parent_node.children)
-      parent_node.children.each { |child| resort_children_recursively(child) }
-    end
-  end
-
   # Helper methods for diff comparison
   def find_added_nodes(current_nodes, other_nodes)
-    other_nodes.reject do |other_node|
-      current_nodes.any? { |current_node| nodes_equivalent?(current_node, other_node) }
+    current_nodes.reject do |current_node|
+      other_nodes.any? { |other_node| nodes_equivalent?(current_node, other_node) }
     end
   end
 
   def find_removed_nodes(current_nodes, other_nodes)
-    current_nodes.reject do |current_node|
-      other_nodes.any? { |other_node| nodes_equivalent?(current_node, other_node) }
+    other_nodes.reject do |other_node|
+      current_nodes.any? { |current_node| nodes_equivalent?(current_node, other_node) }
     end
   end
 
   def find_modified_nodes(current_nodes, other_nodes)
     modified = []
     current_nodes.each do |current_node|
-      other_node = other_nodes.find { |n| n.id == current_node.id }
+      # Find equivalent node in other version by content and structure
+      other_node = other_nodes.find { |n| nodes_structurally_equivalent?(current_node, n) }
       if other_node && !nodes_content_equal?(current_node, other_node)
-        modified << {
-          current: current_node,
-          other: other_node,
-          changes: detect_node_changes(current_node, other_node)
-        }
+        modified << current_node
       end
     end
     modified
   end
 
   def nodes_equivalent?(node1, node2)
-    node1.content == node2.content &&
+    # Compare content and structure, but not position (which can change)
+    node1.content.strip == node2.content.strip &&
     node1.level == node2.level &&
-    node1.list_style == node2.list_style &&
-    node1.position == node2.position
+    node1.list_style == node2.list_style
+  end
+
+  def nodes_structurally_equivalent?(node1, node2)
+    # Check if nodes represent the same logical content
+    node1.content.strip == node2.content.strip &&
+    node1.level == node2.level &&
+    node1.list_style == node2.list_style
   end
 
   def nodes_content_equal?(node1, node2)
-    node1.content == node2.content &&
+    node1.content.strip == node2.content.strip &&
     node1.review_date == node2.review_date &&
     node1.completed == node2.completed
-  end
-
-  def detect_node_changes(current_node, other_node)
-    changes = {}
-    changes[:content] = [current_node.content, other_node.content] if current_node.content != other_node.content
-    changes[:review_date] = [current_node.review_date, other_node.review_date] if current_node.review_date != other_node.review_date
-    changes[:completed] = [current_node.completed, other_node.completed] if current_node.completed != other_node.completed
-    changes
   end
 
   def should_merge_node?(node)

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2025_06_14_213615) do
+ActiveRecord::Schema[7.1].define(version: 2025_06_18_231538) do
   create_table "action_nodes", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.bigint "task_version_id", null: false
     t.bigint "parent_id"
@@ -70,7 +70,7 @@ ActiveRecord::Schema[7.1].define(version: 2025_06_14_213615) do
 
   create_table "reviews", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.bigint "task_version_id", null: false
-    t.bigint "base_version_id", null: false
+    t.bigint "base_version_id"
     t.bigint "reviewer_id"
     t.string "status", default: "pending", null: false
     t.text "summary"
@@ -129,7 +129,7 @@ ActiveRecord::Schema[7.1].define(version: 2025_06_14_213615) do
   add_foreign_key "action_nodes", "action_nodes", column: "parent_id"
   add_foreign_key "action_nodes", "task_versions"
   add_foreign_key "comment_trails", "reviews"
-  add_foreign_key "comments", "action_nodes"
+  add_foreign_key "comments", "action_nodes", on_delete: :nullify
   add_foreign_key "comments", "comment_trails"
   add_foreign_key "comments", "users"
   add_foreign_key "notifications", "reviews"

@@ -32,6 +32,13 @@ Rails.application.routes.draw do
     get 'task/:task_id/comments' => 'comment#index'
     put 'task/:task_id/comments/:id' => 'comment#update'
     delete 'task/:task_id/comments/:id' => 'comment#destroy'
+    
+    # New comment trails routes
+    get 'task/:task_id/comment_trails' => 'comment#comment_trails'
+    post 'review/:review_id/comments' => 'comment#add_comment_to_review'
+    put 'comment/:comment_id/resolve' => 'comment#resolve_comment'
+    put 'comment/:comment_id/update' => 'comment#update_review_comment'
+    delete 'comment/:comment_id' => 'comment#delete_review_comment'
   end
 
   controller :notification do
@@ -43,6 +50,20 @@ Rails.application.routes.draw do
   controller :user do
     get 'users/reviewers' => 'user#reviewers'
     get 'users/final_reviewers' => 'user#final_reviewers'
+  end
+
+  # Review routes
+  controller :review do
+    get 'reviews' => 'review#index'
+    get 'review/:id' => 'review#show'
+    put 'review/:id' => 'review#update'
+    patch 'review/:id' => 'review#update'
+    post 'review/:id/approve' => 'review#approve'
+    post 'review/:id/reject' => 'review#reject'
+    post 'review/:id/forward' => 'review#forward'
+    get 'review/:id/diff' => 'review#diff'
+    get 'review/:id/comments' => 'review#comments'
+    get 'versions/:base_version_id/:current_version_id/diff' => 'review#diff'
   end
 
   # ActionNode routes nested under task versions

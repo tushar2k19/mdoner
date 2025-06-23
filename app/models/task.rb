@@ -43,6 +43,21 @@ class Task < ApplicationRecord
     current_version&.html_formatted_content || ''
   end
 
+  # Update task's review_date based on nearest review_date from all nodes
+  def update_review_date_from_nodes
+    return unless current_version&.all_action_nodes&.any?
+
+    # Find the nearest (earliest) review_date from all nodes
+    nearest_date = current_version.all_action_nodes
+                                  .where.not(review_date: nil)
+                                  .minimum(:review_date)
+
+    if nearest_date && nearest_date != review_date
+      update_column(:review_date, nearest_date)
+      Rails.logger.info "Updated task #{id} review_date to #{nearest_date}"
+    end
+  end
+
   # Custom destroy method to handle foreign key constraints
   def destroy
     ActiveRecord::Base.transaction do

@@ -2,9 +2,7 @@ class Notification < ApplicationRecord
   acts_as_paranoid
   belongs_to :recipient, class_name: 'User'
   belongs_to :task
-  belongs_to :comment, optional: true
   belongs_to :review, optional: true
-  belongs_to :action_node, optional: true
 
   validates :message, presence: true
 
