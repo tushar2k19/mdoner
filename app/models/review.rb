@@ -4,6 +4,7 @@ class Review < ApplicationRecord
   belongs_to :base_version, class_name: 'TaskVersion', optional: true
   belongs_to :reviewer, class_name: 'User'
   has_one :comment_trail, dependent: :destroy
+  has_many :notifications, dependent: :destroy
   after_create :send_notifications
   after_update :update_task_status
   enum status: {

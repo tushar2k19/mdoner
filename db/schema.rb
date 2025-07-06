@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2025_06_18_231538) do
+ActiveRecord::Schema[7.1].define(version: 2025_07_06_143235) do
   create_table "action_nodes", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.bigint "task_version_id", null: false
     t.bigint "parent_id"
@@ -33,6 +33,8 @@ ActiveRecord::Schema[7.1].define(version: 2025_06_18_231538) do
     t.bigint "review_id", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.datetime "deleted_at"
+    t.index ["deleted_at"], name: "index_comment_trails_on_deleted_at"
     t.index ["review_id"], name: "index_comment_trails_on_review_id"
   end
 
@@ -76,7 +78,9 @@ ActiveRecord::Schema[7.1].define(version: 2025_06_18_231538) do
     t.text "summary"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.datetime "deleted_at"
     t.index ["base_version_id"], name: "index_reviews_on_base_version_id"
+    t.index ["deleted_at"], name: "index_reviews_on_deleted_at"
     t.index ["reviewer_id"], name: "index_reviews_on_reviewer_id"
     t.index ["task_version_id"], name: "index_reviews_on_task_version_id"
   end
@@ -90,7 +94,9 @@ ActiveRecord::Schema[7.1].define(version: 2025_06_18_231538) do
     t.text "change_description"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.datetime "deleted_at"
     t.index ["base_version_id"], name: "index_task_versions_on_base_version_id"
+    t.index ["deleted_at"], name: "index_task_versions_on_deleted_at"
     t.index ["editor_id"], name: "index_task_versions_on_editor_id"
     t.index ["task_id"], name: "index_task_versions_on_task_id"
   end

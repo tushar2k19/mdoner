@@ -23,6 +23,8 @@ Rails.application.routes.draw do
     post 'task/:id/complete' => 'task#complete'
     post 'task/:id/mark_incomplete' => 'task#mark_incomplete'
     post 'task/:id/resolve_merge' => 'task#resolve_merge'
+    get 'task/:id/merge_analysis' => 'task#merge_analysis'
+    post 'task/:id/apply_merge' => 'task#apply_merge'
     get 'tasks/approved' => 'task#approved_tasks'
     get 'tasks/completed' => 'task#completed_tasks'
   end

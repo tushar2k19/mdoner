@@ -30,7 +30,7 @@ class TaskVersion < ApplicationRecord
   # ActionNode Management Methods
 
   # Add a new node to this version
-  def add_action_node(content:, level: 1, list_style: 'decimal', node_type: 'point', parent: nil, review_date: nil)
+  def add_action_node(content:, level: 1, list_style: 'decimal', node_type: 'point', parent: nil, review_date: nil, completed: false)
     position = calculate_next_position(parent)
     
     all_action_nodes.create!(
@@ -40,12 +40,13 @@ class TaskVersion < ApplicationRecord
       node_type: node_type,
       parent: parent,
       position: position,
-      review_date: review_date
+      review_date: review_date,
+      completed: completed
     )
   end
 
   # Add subpoint to an existing node
-  def add_subpoint_to_node(parent_node, content:, list_style: nil, review_date: nil)
+  def add_subpoint_to_node(parent_node, content:, list_style: nil, review_date: nil, completed: false)
     # Inherit or default list style based on level
     style = list_style || determine_list_style_for_level(parent_node.level + 1)
     
@@ -55,7 +56,8 @@ class TaskVersion < ApplicationRecord
       list_style: style,
       node_type: 'subpoint',
       parent: parent_node,
-      review_date: review_date
+      review_date: review_date,
+      completed: completed
     )
   end
 
@@ -173,9 +175,18 @@ class TaskVersion < ApplicationRecord
   def format_html_tree_nodes(tree_nodes)
     formatted_html = []
     tree_nodes.each do |tree_item|
-      formatted_html << tree_item[:node].html_formatted_display
+      # Generate the current node's HTML
+      node_html = tree_item[:node].html_formatted_display
+      
+      # If this node has children, we need to include them in a hierarchical structure
       if tree_item[:children].any?
+        # For nodes with children, we maintain the flat structure but ensure proper ordering
+        # The CSS handles indentation via level classes
+        formatted_html << node_html
         formatted_html.concat(format_html_tree_nodes(tree_item[:children]))
+      else
+        # Leaf nodes are added as-is
+        formatted_html << node_html
       end
     end
     formatted_html

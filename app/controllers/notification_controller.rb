@@ -34,10 +34,10 @@ class NotificationController < ApplicationController
     # UNIFIED NOTIFICATION ROUTING: All notifications should redirect to ReviewInterface
     # since every notification is related to a review
     
-    if notification.review_id
+      if notification.review_id
       # Primary case: notification has direct review_id
-      { type: 'review', id: notification.review_id }
-    else
+        { type: 'review', id: notification.review_id }
+      else
       # Fallback: find the latest review for this task
       latest_review = notification.task.reviews.order(created_at: :desc).first
       if latest_review

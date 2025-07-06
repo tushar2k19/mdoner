@@ -7,7 +7,7 @@ class Task < ApplicationRecord
   belongs_to :current_version, class_name: 'TaskVersion', optional: true
 
   # has_many :comments, dependent: :destroy
-  # has_many :notifications, dependent: :destroy
+  has_many :notifications, dependent: :destroy
   has_many :reviews, through: :versions
   
   # Handle deletion properly
@@ -66,10 +66,58 @@ class Task < ApplicationRecord
         # Use update_column to bypass validations and callbacks
         self.update_column(:current_version_id, nil)
       end
-      # Then destroy all versions (which will cascade to action_nodes)
-      self.versions.destroy_all
-      # Finally destroy the task itself
-      super
+      
+      # Delete all notifications first to prevent foreign key constraint violations
+      # This includes both task notifications and review notifications
+      all_notification_ids = []
+      
+      # Collect direct task notifications
+      all_notification_ids += notifications.pluck(:id)
+      
+      # Collect review notifications from all task versions
+      versions.includes(:reviews).each do |version|
+        version.reviews.each do |review|
+          all_notification_ids += review.notifications.pluck(:id)
+        end
+      end
+      
+      # Delete all notifications at once using raw SQL to avoid constraint issues
+      if all_notification_ids.any?
+        Notification.where(id: all_notification_ids.uniq).delete_all
+      end
+      
+      version_ids = versions.pluck(:id)
+      if version_ids.any?
+        TaskVersion.where(base_version_id: version_ids).update_all(base_version_id: nil)
+        Review.where(base_version_id: version_ids).update_all(base_version_id: nil)
+      end
+      
+      comment_trail_ids = []
+      versions.includes(reviews: :comment_trail).each do |version|
+        version.reviews.each do |review|
+          if review.comment_trail
+            comment_trail_ids << review.comment_trail.id
+          end
+        end
+      end
+      
+      # Also find any orphaned comments that might reference comment_trails we're about to delete
+      if comment_trail_ids.any?
+        Comment.where(comment_trail_id: comment_trail_ids.uniq).delete_all
+      end
+      
+      # Temporarily disable foreign key checks for MySQL during destruction
+      ActiveRecord::Base.connection.execute("SET FOREIGN_KEY_CHECKS = 0")
+      
+      begin
+        # Then destroy all versions (which will cascade to reviews, comment_trails, comments, action_nodes)
+        self.versions.destroy_all
+        # Finally destroy the task itself
+        super
+      ensure
+        # Re-enable foreign key checks
+        ActiveRecord::Base.connection.execute("SET FOREIGN_KEY_CHECKS = 1")
+      end
     end
   end
 

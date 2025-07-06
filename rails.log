@@ -1,0 +1,5 @@
+=> Booting Puma
+=> Rails 7.1.3.4 application starting in development 
+=> Run `bin/rails server --help` for more startup options
+A server is already running (pid: 98998, file: /home/tushar/Desktop/project/mdoner_dashboard/backend/tmp/pids/server.pid).
+Exiting

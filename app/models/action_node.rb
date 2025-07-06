@@ -92,8 +92,10 @@ class ActionNode < ApplicationRecord
 
   # Counter generation based on list style and position
   def display_counter
-    # Get the counter position within nodes of the same level and list style
-    counter_position = siblings_with_same_style.where('position <= ?', position).count
+    # Get the counter position within nodes of the same list style at the same level
+    # Count only siblings with the same list style that come before or at this position
+    siblings_before_and_including_me = siblings_with_same_style.where('position <= ?', position).order(:position)
+    counter_position = siblings_before_and_including_me.count
     
     case list_style
     when 'decimal'
