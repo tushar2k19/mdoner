@@ -146,7 +146,7 @@ class ActionNode < ApplicationRecord
     # Format review date if present
     review_date_html = ""
     if review_date.present?
-      formatted_date = review_date.strftime("%d/%m/%Y")
+      formatted_date = review_date.strftime("%d/%m") # Only day and month
       is_today = review_date.to_date == Date.current
       date_classes = ["review-date"]
       date_classes << "today" if is_today
