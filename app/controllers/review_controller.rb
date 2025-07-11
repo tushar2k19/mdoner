@@ -376,7 +376,9 @@ class ReviewController < ApplicationController
       has_rich_formatting: node.has_rich_formatting?,
       diff_status: diff_status, # added, modified, deleted, unchanged
       created_at: node.created_at,
-      updated_at: node.updated_at
+      updated_at: node.updated_at,
+      reviewer_id: node.reviewer_id,
+      reviewer_name: node.reviewer&.first_name # Include reviewer name if reviewer exists
     }
   end
 
@@ -458,7 +460,8 @@ class ReviewController < ApplicationController
         position: node_data['position'] || 1,
         review_date: node_data['review_date'],
         completed: node_data['completed'] || false,
-        parent: parent_node
+        parent: parent_node,
+        reviewer_id: node_data['reviewer_id'] # Preserve reviewer_id when creating nodes
       )
       
       # Store mapping for children

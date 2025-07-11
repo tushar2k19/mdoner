@@ -548,30 +548,29 @@ class TaskController < ApplicationController
 
   def serialize_task_with_version(task)
     base_task = task.as_json
-    
-    if task.current_version
-      # Add version-specific data
-      base_task['current_version_id'] = task.current_version.id
-      base_task['version_number'] = task.current_version.version_number
-      base_task['action_to_be_taken'] = task.action_to_be_taken
-      
-      # CRITICAL: Include action_nodes for frontend subtask calculations
-      base_task['current_version'] = {
-        id: task.current_version.id,
-        version_number: task.current_version.version_number,
-        status: task.current_version.status,
-        action_nodes: serialize_flat_node_hierarchy(task.current_version.node_tree)
-      }
-      
-      # Get earliest review date from nodes
-      if task.current_version.all_action_nodes.any?
-        earliest_date = task.current_version.all_action_nodes
-                           .where.not(review_date: nil)
-                           .minimum(:review_date)
-        base_task['review_date'] = earliest_date if earliest_date
-      end
+    current_version = task.current_version
+
+    # Add version-specific data
+    base_task.merge!(
+      'action_to_be_taken' => task.action_to_be_taken,
+      'current_version' => current_version ? {
+        'id' => current_version.id,
+        'version_number' => current_version.version_number,
+        'status' => current_version.status,
+        'editor_name' => current_version.editor.full_name,
+        'editor_id' => current_version.editor.id,
+        'action_nodes' => serialize_flat_node_hierarchy(current_version.node_tree)
+      } : nil,
+      'editor_name' => task.editor.full_name,
+      'editor_id' => task.editor.id,
+      'reviewer_info' => task.reviewer_info
+    )
+
+    # Add completion info if task is completed
+    if task.completed?
+      base_task['completed_at'] = task.completed_at
     end
-    
+
     base_task
   end
 
@@ -617,7 +616,9 @@ class TaskController < ApplicationController
       review_date: node.review_date,
       completed: node.completed,
       parent_id: node.parent_id,
-      display_counter: node.display_counter
+      display_counter: node.display_counter,
+      reviewer_id: node.reviewer_id,
+      reviewer_name: node.reviewer&.first_name  # Include reviewer name if reviewer exists
     }
   end
 
@@ -646,7 +647,8 @@ class TaskController < ApplicationController
         node_type: node_data['node_type'] || 'point',
         parent: parent_node,
         review_date: node_data['review_date'],
-        completed: node_data['completed'] || false
+        completed: node_data['completed'] || false,
+        reviewer_id: node_data['reviewer_id'] # Add reviewer_id when recreating nodes
       )
       
       # Store mapping for temporary IDs

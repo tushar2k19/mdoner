@@ -30,7 +30,7 @@ class TaskVersion < ApplicationRecord
   # ActionNode Management Methods
 
   # Add a new node to this version
-  def add_action_node(content:, level: 1, list_style: 'decimal', node_type: 'point', parent: nil, review_date: nil, completed: false)
+  def add_action_node(content:, level: 1, list_style: 'decimal', node_type: 'point', parent: nil, review_date: nil, completed: false, reviewer_id: nil)
     position = calculate_next_position(parent)
     
     all_action_nodes.create!(
@@ -41,7 +41,8 @@ class TaskVersion < ApplicationRecord
       parent: parent,
       position: position,
       review_date: review_date,
-      completed: completed
+      completed: completed,
+      reviewer_id: reviewer_id
     )
   end
 
@@ -212,7 +213,8 @@ class TaskVersion < ApplicationRecord
       position: source_node.position,
       review_date: source_node.review_date,
       completed: source_node.completed,
-      parent: new_parent
+      parent: new_parent,
+      reviewer_id: source_node.reviewer_id # Preserve reviewer_id when copying
     )
     
     node_mapping[source_node.id] = new_node.id

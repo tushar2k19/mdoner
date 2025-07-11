@@ -2,6 +2,7 @@
 class ActionNode < ApplicationRecord
   belongs_to :task_version
   belongs_to :parent, class_name: 'ActionNode', optional: true
+  belongs_to :reviewer, class_name: 'User', optional: true
   has_many :children, class_name: 'ActionNode', foreign_key: 'parent_id', dependent: :destroy
   has_many :comments, dependent: :nullify
 
@@ -156,18 +157,29 @@ class ActionNode < ApplicationRecord
     # Generate CSS classes based on level and list style
     css_classes = ["action-node", "level-#{level}", "style-#{list_style}"]
     css_classes << "completed" if completed
+    css_classes << "has-reviewer" if reviewer_id.present?
+    
+    # Add reviewer data attributes if present
+    reviewer_data = ""
+    reviewer_html = ""
+    if reviewer_id.present? && reviewer
+      reviewer_data = %( data-reviewer-id="#{reviewer_id}" data-reviewer-name="#{reviewer.full_name}")
+      reviewer_html = %(<span class="reviewer-badge-parallel" data-reviewer-id="#{reviewer_id}">#{reviewer.full_name}</span>)
+    end
     
     # Generate the HTML structure
     case list_style
     when 'bullet'
-      %(<div class="#{css_classes.join(' ')}">
+      %(<div class="#{css_classes.join(' ')}"#{reviewer_data}>
           <span class="node-marker">#{counter}</span>
           <span class="node-content">#{content_html}#{review_date_html}</span>
+          #{reviewer_html}
         </div>).html_safe
     else
-      %(<div class="#{css_classes.join(' ')}">
+      %(<div class="#{css_classes.join(' ')}"#{reviewer_data}>
           <span class="node-marker">#{counter}.</span>
           <span class="node-content">#{content_html}#{review_date_html}</span>
+          #{reviewer_html}
         </div>).html_safe
     end
   end

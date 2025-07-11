@@ -41,7 +41,7 @@ class ActionNodeController < ApplicationController
   def update
     if @action_node.update(node_params)
       # Update review dates up the tree if review_date changed
-      if saved_change_to_review_date?
+      if @action_node.saved_change_to_review_date?
         @action_node.update_review_date
         @action_node.parent&.update_review_date
       end
@@ -206,7 +206,7 @@ class ActionNodeController < ApplicationController
   def node_params
     params.require(:action_node).permit(
       :content, :level, :list_style, :node_type, :parent_id, 
-      :review_date, :completed, :position
+      :review_date, :completed, :position, :reviewer_id
     )
   end
 
@@ -225,6 +225,8 @@ class ActionNodeController < ApplicationController
       display_counter: node.display_counter,
       formatted_display: node.formatted_display,
       has_rich_formatting: node.has_rich_formatting?,
+      reviewer_id: node.reviewer_id,
+      reviewer_name: node.reviewer&.full_name,
       created_at: node.created_at,
       updated_at: node.updated_at
     }

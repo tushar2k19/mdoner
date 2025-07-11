@@ -43,6 +43,19 @@ class Task < ApplicationRecord
     current_version&.html_formatted_content || ''
   end
 
+  # Get reviewer information for the task
+  def reviewer_info
+    return nil unless current_version
+    
+    reviewers = current_version.all_action_nodes
+                              .joins(:reviewer)
+                              .select('DISTINCT users.first_name, users.last_name')
+                              .reorder('users.first_name, users.last_name')
+                              .map { |node| "#{node.first_name} #{node.last_name}" }
+    
+    reviewers.any? ? reviewers.join(', ') : nil
+  end
+
   # Update task's review_date based on nearest review_date from all nodes
   def update_review_date_from_nodes
     return unless current_version&.all_action_nodes&.any?
