@@ -20,7 +20,7 @@ test:
 #   password: <%= ENV.fetch("MYSQL_PASSWORD", "Imtjrocks@123") %>
 #   host: <%= ENV["MYSQL_HOST"] %>
 #   port: <%= ENV["MYSQL_PORT"] %>   
-#   database: <%= ENV["MYSQL_DATABASE"] %>
+#   database: <%= ENV["MYSQL_DATABASE"] %> 
 production:
   <<: *default
   url:  <%= ENV.fetch("DATABASE_URL", "mysql://root:uPYrSJwjYxnxxXjbVHGzJXqOYMFBbUoM@shinkansen.proxy.rlwy.net:36621/railway") %>
