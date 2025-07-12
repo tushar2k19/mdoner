@@ -9,14 +9,10 @@ development:
   <<: *default
   database: <%= ENV.fetch("MYSQLDATABASE_APP", "mdoner-dashboard") %>
 
-#  url: <%#= ENV["DATABASE_URL"] %>
-#  port: <%#= ENV.fetch("MYSQLPORT", 35928) %>
-#  host: <%#= ENV.fetch("MYSQLHOST", "localhost") %>
-
 test:
   <<: *default
   database: crm_test
 
 production:
   <<: *default
-  url: <%= ENV["DATABASE_URL"] %>
+  url: "<%= ENV['DATABASE_URL'] %>"
