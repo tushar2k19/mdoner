@@ -13,13 +13,6 @@ test:
   <<: *default
   database: chhatisgarh_test
 
-# production:
-#   <<: *default
-#   username: <%= ENV.fetch("MYSQL_USER", "root") %>
-#   password: <%= ENV.fetch("MYSQL_PASSWORD", "Imtjrocks@123") %>
-#   host: <%= ENV["MYSQL_HOST"] %>
-#   port: <%= ENV["MYSQL_PORT"] %>
-#   database: <%= ENV["MYSQL_DATABASE"] %>
 production:
   <<: *default
-  url:  <%= ENV["DATABASE_URL"] %>
+  url: <%= ENV["DATABASE_URL"] %>
