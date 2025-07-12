@@ -7,9 +7,9 @@
 
 Rails.application.config.middleware.insert_before 0, Rack::Cors do
   allow do
-    origins ENV.fetch('CORS_ORIGINS', '*').split(',').map(&:strip)
-    
-    resource '*',
+    origins "http://localhost:8080", "https://tushar-crm.netlify.app"
+
+    resource "*",
              headers: :any,
       methods: [:get, :post, :put, :patch, :delete, :options, :head],
              credentials: true,
