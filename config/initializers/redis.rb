@@ -1,5 +1,4 @@
 require 'redis'
-require 'redis-namespace'
 
 # redis = Redis.new(url: ENV['REDIS_URL'] || 'redis://localhost:6379/0') if ENV['RAILS_ENV'] != 'production'
 # redis = Redis.new(url: ENV['REDIS_URL'], password: ENV['REDIS_AUTH_TOKEN']) if ENV['RAILS_ENV'] == 'production'
@@ -17,7 +16,7 @@ if ENV['RAILS_ENV'] == 'production'
 else
   redis = Redis.new(url: 'redis://localhost:6379/0')
 end
-REDIS = Redis::Namespace.new('chhattisgarh_backend', redis: redis)
+REDIS = Redis::Namespace.new('MD_backend', redis: redis)
 Rails.logger.info("__REDIS_set_successfully__") if REDIS
 Rails.logger.info(redis) if REDIS
 
