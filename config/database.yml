@@ -5,6 +5,7 @@ default: &default
   username: <%= ENV.fetch("MYSQL_USER", "root") %>
   password: <%= ENV.fetch("MYSQL_PASSWORD", "Imtjrocks@123") %>
 
+
 development:
   <<: *default
   database: <%= ENV.fetch("MYSQL__DATABASE_APP", "mdoner-dashboard") %>
@@ -13,6 +14,13 @@ test:
   <<: *default
   database: chhatisgarh_test
 
+# production:
+#   <<: *default
+#   username: <%= ENV.fetch("MYSQL_USER", "root") %>
+#   password: <%= ENV.fetch("MYSQL_PASSWORD", "Imtjrocks@123") %>
+#   host: <%= ENV["MYSQL_HOST"] %>
+#   port: <%= ENV["MYSQL_PORT"] %>   
+#   database: <%= ENV["MYSQL_DATABASE"] %>
 production:
   <<: *default
-  url: <%= ENV["DATABASE_URL"] %>
+  url:  <%= ENV.fetch("DATABASE_URL", "mysql://root:uPYrSJwjYxnxxXjbVHGzJXqOYMFBbUoM@shinkansen.proxy.rlwy.net:36621/railway") %>
