@@ -1,23 +1,14 @@
-# Install the MySQL driver
-#   gem install mysql2
-#
-# Ensure the MySQL gem is defined in your Gemfile
-#   gem "mysql2"
-#
-# And be sure to use new-style password hashing:
-#   https://dev.mysql.com/doc/refman/5.7/en/password-hashing.html
-#
 default: &default
   adapter: mysql2
   encoding: utf8mb4
   pool: <%= ENV.fetch("RAILS_MAX_THREADS") { 5 } %>
   username: <%= ENV.fetch("MYSQLUSER", "root") %>
   password: <%= ENV.fetch("MYSQLPASSWORD", "Imtjrocks@123") %>
-  socket: /var/run/mysqld/mysqld.sock
 
 development:
   <<: *default
   database: <%= ENV.fetch("MYSQLDATABASE_APP", "mdoner-dashboard") %>
+
 #  url: <%#= ENV["DATABASE_URL"] %>
 #  port: <%#= ENV.fetch("MYSQLPORT", 35928) %>
 #  host: <%#= ENV.fetch("MYSQLHOST", "localhost") %>
@@ -28,4 +19,4 @@ test:
 
 production:
   <<: *default
-  url:  <%= ENV["DATABASE_URL"] %>
+  url: <%= ENV["DATABASE_URL"] %>
