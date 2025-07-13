@@ -2,16 +2,16 @@ default: &default
   adapter: mysql2
   encoding: utf8mb4
   pool: <%= ENV.fetch("RAILS_MAX_THREADS") { 5 } %>
-  username: <%= ENV.fetch("MYSQLUSER", "root") %>
-  password: <%= ENV.fetch("MYSQLPASSWORD", "Imtjrocks@123") %>
+  username: <%= ENV.fetch("MYSQL_USER", "root") %>
+  password: <%= ENV.fetch("MYSQL_PASSWORD", "Imtjrocks@123") %>
 
 development:
   <<: *default
-  database: <%= ENV.fetch("MYSQLDATABASE_APP", "mdoner-dashboard") %>
+  database: <%= ENV.fetch("MYSQL__DATABASE_APP", "mdoner-dashboard") %>
 
 test:
   <<: *default
-  database: crm_test
+  database: chhatisgarh_test
 
 production:
-  url: "<%= ENV['DATABASE_URL'] %>"
+  url: <%= ENV['DATABASE_URL'] %>
