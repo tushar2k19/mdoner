@@ -12,6 +12,10 @@ Rails.application.routes.draw do
     delete 'signout' => 'signin#destroy'
   end
 
+  controller :signup do
+    post 'signup' => 'signup#create'
+  end
+
   controller :task do
     get 'tasks' => 'task#index'
     post 'task' => 'task#create'
