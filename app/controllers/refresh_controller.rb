@@ -6,22 +6,13 @@ class RefreshController < ApplicationController
 
     tokens = session.refresh(found_token: access_token)
 
-    # Set JWT cookies with proper domain and security settings
-    cookie_options = {
-      httponly: true,
-      secure: Rails.env.production?,
-      same_site: Rails.env.production? ? :none : :lax,
-      path: '/'
-    }
-    
-    # Set domain for production
-    if Rails.env.production?
-      cookie_options[:domain] = '.railway.app'
-    end
-
     response.set_cookie(JWTSessions.access_cookie,
                         value: tokens[:access],
-                        **cookie_options)
+                        httponly: true,
+                        secure: Rails.env.production?,
+                        same_site: Rails.env.production? ? :none : :lax,
+                        path: '/',
+                        domain: Rails.env.production? ? "mdoner-production.up.railway.app" : "localhost")
 
     response.set_cookie('csrf_token',
                         value: tokens[:csrf],
@@ -29,7 +20,7 @@ class RefreshController < ApplicationController
                         secure: Rails.env.production?,
                         same_site: Rails.env.production? ? :none : :lax,
                         path: '/',
-                        domain: Rails.env.production? ? '.railway.app' : nil)
+                        domain: Rails.env.production? ? "mdoner-production.up.railway.app" : "localhost")
 
     render json: { csrf: tokens[:csrf] }
   rescue JWTSessions::Errors::Unauthorized, JWTSessions::Errors::ClaimsVerification => e

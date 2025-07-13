@@ -3,9 +3,6 @@ Rails.application.routes.draw do
   mount ActionCable.server => '/cable'
   # root "refresh#index"
 
-  # Test authentication endpoint
-  get 'test_auth' => 'application#test_auth'
-
   controller :refresh do
     post 'refresh' => 'refresh#create'
   end
@@ -13,6 +10,10 @@ Rails.application.routes.draw do
   controller :signin do
     post 'signin' => 'signin#create'
     delete 'signout' => 'signin#destroy'
+  end
+
+  controller :signup do
+    post 'signup' => 'signup#create'
   end
 
   controller :task do
