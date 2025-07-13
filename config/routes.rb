@@ -3,6 +3,9 @@ Rails.application.routes.draw do
   mount ActionCable.server => '/cable'
   # root "refresh#index"
 
+  # Test authentication endpoint
+  get 'test_auth' => 'application#test_auth'
+
   controller :refresh do
     post 'refresh' => 'refresh#create'
   end

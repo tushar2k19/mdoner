@@ -1,5 +1,5 @@
 class TaskController < ApplicationController
-  # before_action :authorize_access_request!
+  before_action :authorize_access_request!
   before_action :set_task, only: [
     :update,
     :destroy,
