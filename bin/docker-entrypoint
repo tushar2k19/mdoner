@@ -1,8 +1,30 @@
 #!/bin/bash -e
 
+# Clean up PID files to prevent "server already running" errors
+cleanup_pid_files() {
+  if [ -f /rails/tmp/pids/server.pid ]; then
+    echo "Cleaning up existing PID file..."
+    rm -f /rails/tmp/pids/server.pid
+  fi
+}
+
+# Trap to ensure cleanup on exit
+trap cleanup_pid_files EXIT
+
 # If running the rails server then create or migrate existing database
 if [ "${1}" == "./bin/rails" ] && [ "${2}" == "server" ]; then
+  echo "Starting Rails server setup..."
+  
+  # Clean up any existing PID files
+  cleanup_pid_files
+  
+  # Ensure tmp/pids directory exists
+  mkdir -p /rails/tmp/pids
+  
+  # Prepare database
   ./bin/rails db:prepare
+  
+  echo "Rails server setup completed"
 fi
 
 exec "${@}"

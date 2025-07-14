@@ -1,35 +1,46 @@
 require 'redis'
 
-# redis = Redis.new(url: ENV['REDIS_URL'] || 'redis://localhost:6379/0') if ENV['RAILS_ENV'] != 'production'
-# redis = Redis.new(url: ENV['REDIS_URL'], password: ENV['REDIS_AUTH_TOKEN']) if ENV['RAILS_ENV'] == 'production'
+# Optimize Redis connection for production memory constraints
+redis_config = {
+  url: ENV['REDIS_URL'] || (ENV['RAILS_ENV'] == 'production' ? ENV['REDIS_URL'] : 'redis://localhost:6379/0'),
+  timeout: 1,
+  reconnect_attempts: 1,
+  reconnect_delay: 0.5,
+  reconnect_delay_max: 1.0
+}
 
-# REDIS_PASSWORD = ENV['REDIS_PASSWORD'] || ''
-# REDIS_HOST = ENV['REDIS_HOST']
-# REDIS_PORT = ENV['REDIS_PORT']
-# REDIS_URL = "rediss://:#{REDIS_PASSWORD}@#{REDIS_HOST}"
-
-if ENV['RAILS_ENV'] == 'production'
-  redis = Redis.new(
-    url: ENV['REDIS_URL']
-  )
-  Rails.logger.info("Using_Redis_URL: #{redis}")
-else
-  redis = Redis.new(url: 'redis://localhost:6379/0')
+# Create a single Redis connection instance instead of multiple
+Rails.application.config.after_initialize do
+  if defined?(REDIS)
+    REDIS.redis.disconnect!
+  end
+  
+  redis_instance = Redis.new(redis_config)
+  
+  # Set the global constant only once
+  Object.const_set('REDIS', Redis::Namespace.new('MD_backend', redis: redis_instance)) unless defined?(REDIS)
+  
+  Rails.logger.info("Redis connection established: #{redis_instance.id}")
 end
-REDIS = Redis::Namespace.new('MD_backend', redis: redis)
-Rails.logger.info("__REDIS_set_successfully__") if REDIS
-Rails.logger.info(redis) if REDIS
 
+# Optimize memory by ensuring connections are closed properly
+at_exit do
+  if defined?(REDIS)
+    REDIS.redis.disconnect!
+    Rails.logger.info("Redis connection closed on exit")
+  end
+end
 
 def store_last_location(user_id, location_data)
-  pp "inside the REDIS set"
   REDIS.set("user:#{user_id}:last_location", location_data.to_json)
+rescue Redis::BaseError => e
+  Rails.logger.error("Redis error in store_last_location: #{e.message}")
 end
 
 def get_last_location(user_id)
-  pp "inside the REDIS GET"
   location_json = REDIS.get("user:#{user_id}:last_location")
   location_json ? JSON.parse(location_json) : nil
+rescue Redis::BaseError => e
+  Rails.logger.error("Redis error in get_last_location: #{e.message}")
+  nil
 end
-# REDIS.del("user:1:last_location")
-# REDIS.get("user:4:last_location")
