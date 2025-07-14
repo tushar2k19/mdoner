@@ -20,16 +20,3 @@ REDIS = Redis::Namespace.new('MD_backend', redis: redis)
 Rails.logger.info("__REDIS_set_successfully__") if REDIS
 Rails.logger.info(redis) if REDIS
 
-
-def store_last_location(user_id, location_data)
-  pp "inside the REDIS set"
-  REDIS.set("user:#{user_id}:last_location", location_data.to_json)
-end
-
-def get_last_location(user_id)
-  pp "inside the REDIS GET"
-  location_json = REDIS.get("user:#{user_id}:last_location")
-  location_json ? JSON.parse(location_json) : nil
-end
-# REDIS.del("user:1:last_location")
-# REDIS.get("user:4:last_location")

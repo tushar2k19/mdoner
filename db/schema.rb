@@ -14,7 +14,7 @@ ActiveRecord::Schema[7.1].define(version: 2025_07_13_161719) do
   create_table "action_nodes", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.bigint "task_version_id", null: false
     t.bigint "parent_id"
-    t.text "content", null: false
+    t.text "content", size: :medium, null: false
     t.datetime "review_date"
     t.integer "level", default: 1
     t.string "list_style", default: "decimal"
