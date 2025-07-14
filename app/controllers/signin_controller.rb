@@ -31,15 +31,8 @@ class SigninController < ApplicationController
       combined = iv + encrypted_data
       encoded_data = Base64.strict_encode64(combined)
 
-      response.set_cookie(JWTSessions.access_cookie,
-                          value: tokens[:access],
-                          httponly: true,
-                          secure: Rails.env.production?,
-                          same_site: Rails.env.production? ? :none : :lax,
-                          path: '/',
-                          # domain: Rails.env.production? ? "mdoner-production.up.railway.app" : "localhost")
-
-      render json: { success: true, data: encoded_data }
+      # Instead of setting the JWT as an HttpOnly cookie, return it in the response for frontend to use
+      render json: { success: true, access: tokens[:access], csrf: tokens[:csrf], data: encoded_data }
     else
       Rails.logger.warn("Invalid login attempt for email: #{params[:email]}")
       render json: { error: 'Invalid email or password' }, status: :unauthorized
