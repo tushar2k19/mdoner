@@ -19,8 +19,7 @@ class SigninController < ApplicationController
 
       data_to_encrypt = {
         user_info: signin_info,
-        csrf_token: tokens[:csrf],
-        jwt_access1: tokens[:access]
+        csrf_token: tokens[:csrf]
       }
       iv = SecureRandom.random_bytes(16)
 
@@ -38,7 +37,7 @@ class SigninController < ApplicationController
                           secure: Rails.env.production?,
                           same_site: Rails.env.production? ? :none : :lax,
                           path: '/',
-                          domain: Rails.env.production? ? "mdoner-production.up.railway.app" : "localhost")
+                          # domain: Rails.env.production? ? "mdoner-production.up.railway.app" : "localhost")
 
       render json: { success: true, data: encoded_data }
     else
