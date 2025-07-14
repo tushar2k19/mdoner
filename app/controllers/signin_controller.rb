@@ -19,7 +19,8 @@ class SigninController < ApplicationController
 
       data_to_encrypt = {
         user_info: signin_info,
-        csrf_token: tokens[:csrf]
+        csrf_token: tokens[:csrf],
+        jwt_access1: tokens[:access]
       }
       iv = SecureRandom.random_bytes(16)
 
