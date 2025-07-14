@@ -4,6 +4,18 @@ class ApplicationController < ActionController::API
   include JWTSessions::RailsAuthorization
   rescue_from JWTSessions::Errors::Unauthorized, with: :not_authorized
 
+  def test_auth
+    render json: { 
+      success: true, 
+      message: 'Authentication working',
+      user: {
+        id: current_user.id,
+        email: current_user.email,
+        role: current_user.role
+      }
+    }
+  end
+
   private
   def current_user
     @current_user || (User.find(payload['user_id']))#comes from the JWT sessions (line 2)
