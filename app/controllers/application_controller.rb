@@ -18,7 +18,28 @@ class ApplicationController < ActionController::API
 
   private
   def current_user
-    @current_user || (User.find(payload['user_id']))#comes from the JWT sessions (line 2)
+    @current_user ||= begin
+      user_id = nil
+
+      # 1. Try to get JWT from Authorization header
+      auth_header = request.headers['Authorization']
+      if auth_header&.start_with?('Bearer ')
+        token = auth_header.split(' ', 2).last
+        begin
+          payload = JWTSessions::Token.decode(token)
+          user_id = payload['user_id']
+        rescue
+          # Invalid token, fallback to cookie
+        end
+      end
+
+      # 2. Fallback: Try to get JWT from cookie (default JWTSessions behavior)
+      if user_id.nil?
+        user_id = payload['user_id'] rescue nil
+      end
+
+      user_id ? User.find(user_id) : nil
+    end
   end
   def not_authorized
     render json: { error: "Not authorized" }, status: :unauthorized
