@@ -11,10 +11,18 @@ max_threads_count = ENV.fetch("RAILS_MAX_THREADS") { 5 } #5
 min_threads_count = ENV.fetch("RAILS_MIN_THREADS") { 3 } #max_threads_count
 threads min_threads_count, max_threads_count
 
-# Specifies that the worker count should equal the number of processors in production.
+# Limit workers for small applications to save memory
 if ENV["RAILS_ENV"] == "production"
   require "concurrent-ruby"
+  
+  # For testing/small applications, use just 1 worker to minimize memory usage
+  # This saves maximum memory while still providing thread-based concurrency
+  max_workers = 4  # Single worker for testing - saves most memory
+  
   worker_count = Integer(ENV.fetch("WEB_CONCURRENCY") { Concurrent.physical_processor_count })
+  # Cap the worker count to our maximum
+  worker_count = [worker_count, max_workers].min
+  
   workers worker_count if worker_count > 1
 end
 
@@ -33,20 +41,3 @@ pidfile ENV.fetch("PIDFILE") { "tmp/pids/server.pid" }
 
 # Allow puma to be restarted by `bin/rails restart` command.
 plugin :tmp_restart
-
-
-
-# max_threads_count = ENV.fetch("RAILS_MAX_THREADS") { 16 }
-# min_threads_count = ENV.fetch("RAILS_MIN_THREADS") { 5 }
-# threads min_threads_count, max_threads_count
-# if ENV["RAILS_ENV"] == "production"
-#   require "concurrent-ruby"
-#   worker_count = Integer(ENV.fetch("WEB_CONCURRENCY") { Concurrent.physical_processor_count })
-#   workers worker_count if worker_count > 1
-# end
-#
-# worker_timeout 3600 if ENV.fetch("RAILS_ENV", "development") == "development"
-# port ENV.fetch("PORT") { 3000 }
-# environment ENV.fetch("RAILS_ENV") { "development" }
-# pidfile ENV.fetch("PIDFILE") { "tmp/pids/server.pid" }
-# plugin :tmp_restart
