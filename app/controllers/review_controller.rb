@@ -378,7 +378,7 @@ class ReviewController < ApplicationController
       created_at: node.created_at,
       updated_at: node.updated_at,
       reviewer_id: node.reviewer_id,
-      reviewer_name: node.reviewer&.first_name # Include reviewer name if reviewer exists
+      reviewer_name: node.reviewer&.first_name # Include reviewer name if reviewer exists 
     }
   end
 
