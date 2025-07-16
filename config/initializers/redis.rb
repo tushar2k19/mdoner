@@ -6,7 +6,7 @@ require 'redis'
 # REDIS_PASSWORD = ENV['REDIS_PASSWORD'] || ''
 # REDIS_HOST = ENV['REDIS_HOST']
 # REDIS_PORT = ENV['REDIS_PORT']
-# REDIS_URL = "rediss://:#{REDIS_PASSWORD}@#{REDIS_HOST}"
+# REDIS_URL = "rediss://:#{REDIS_PASSWORD}@#{REDIS_HOST}" 
 
 if ENV['RAILS_ENV'] == 'production'
   redis = Redis.new(
