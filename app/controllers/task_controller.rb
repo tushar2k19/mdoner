@@ -149,7 +149,7 @@ class TaskController < ApplicationController
           )
         end
         
-        # Update task's review_date based on node dates
+        # Update task's review_date based on node dates 
         task.update_review_date_from_nodes
         
         render json: { 
