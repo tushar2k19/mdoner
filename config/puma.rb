@@ -8,7 +8,7 @@
 # the maximum value specified for Puma. Default is set to 5 threads for minimum
 # and maximum; this matches the default thread size of Active Record.
 max_threads_count = ENV.fetch("RAILS_MAX_THREADS") { 5 } #5
-min_threads_count = ENV.fetch("RAILS_MIN_THREADS") { 3 } #max_threads_count
+min_threads_count = ENV.fetch("RAILS_MIN_THREADS") { 2 } #max_threads_count
 threads min_threads_count, max_threads_count
 
 # Limit workers for small applications to save memory
@@ -17,7 +17,7 @@ if ENV["RAILS_ENV"] == "production"
   
   # For testing/small applications, use just 1 worker to minimize memory usage
   # This saves maximum memory while still providing thread-based concurrency
-  max_workers = 4  # Single worker for testing - saves most memory
+  max_workers = 2  # Single worker for testing - saves most memory
   
   worker_count = Integer(ENV.fetch("WEB_CONCURRENCY") { Concurrent.physical_processor_count })
   # Cap the worker count to our maximum
