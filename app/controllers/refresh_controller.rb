@@ -27,7 +27,7 @@ class RefreshController < ApplicationController
     Rails.logger.error("Refresh token error: #{e.message}")
     render json: { error: 'Not authorized' }, status: :unauthorized
   end
-
+ 
   private
 
   def access_token
