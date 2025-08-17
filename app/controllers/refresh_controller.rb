@@ -13,7 +13,7 @@ class RefreshController < ApplicationController
                         same_site: Rails.env.production? ? :none : :lax,
                         path: '/',
                         domain: Rails.env.production? ? "mdoner-production.up.railway.app" : "localhost")
-
+ 
     response.set_cookie('csrf_token',
                         value: tokens[:csrf],
                         httponly: false,
