@@ -141,46 +141,58 @@ class ActionNode < ApplicationRecord
 
   # Get formatted HTML display with counter, indentation and styling for dashboard
   def html_formatted_display
-    counter = display_counter
-    content_html = html_content
-    
-    # Format review date if present
-    review_date_html = ""
-    if review_date.present?
-      formatted_date = review_date.strftime("%d/%m") # Only day and month
-      is_today = review_date.to_date == Date.current
-      date_classes = ["review-date"]
-      date_classes << "today" if is_today
-      review_date_html = %( <span class="#{date_classes.join(' ')}">#{formatted_date}</span>)
-    end
-    
-    # Generate CSS classes based on level and list style
-    css_classes = ["action-node", "level-#{level}", "style-#{list_style}"]
-    css_classes << "completed" if completed
-    css_classes << "has-reviewer" if reviewer_id.present?
-    
-    # Add reviewer data attributes if present
-    reviewer_data = ""
-    reviewer_html = ""
-    if reviewer_id.present? && reviewer
-      reviewer_data = %( data-reviewer-id="#{reviewer_id}" data-reviewer-name="#{reviewer.full_name}")
-      reviewer_html = %(<span class="reviewer-badge-parallel" data-reviewer-id="#{reviewer_id}">#{reviewer.full_name}</span>)
-    end
-    
-    # Generate the HTML structure
-    case list_style
-    when 'bullet'
-      %(<div class="#{css_classes.join(' ')}"#{reviewer_data}>
-          <span class="node-marker">#{counter}</span>
-          <span class="node-content">#{content_html}#{review_date_html}</span>
-          #{reviewer_html}
-        </div>).html_safe
-    else
-      %(<div class="#{css_classes.join(' ')}"#{reviewer_data}>
-          <span class="node-marker">#{counter}.</span>
-          <span class="node-content">#{content_html}#{review_date_html}</span>
-          #{reviewer_html}
-        </div>).html_safe
+    begin
+      counter = display_counter
+      content_html = html_content
+      
+      # Format review date if present
+      review_date_html = ""
+      if review_date.present?
+        formatted_date = review_date.strftime("%d/%m") # Only day and month
+        is_today = review_date.to_date == Date.current
+        date_classes = ["review-date"]
+        date_classes << "today" if is_today
+        review_date_html = %( <span class="#{date_classes.join(' ')}">#{formatted_date}</span>)
+      end
+      
+      # Generate CSS classes based on level and list style
+      css_classes = ["action-node", "level-#{level}", "style-#{list_style}"]
+      css_classes << "completed" if completed
+      css_classes << "has-reviewer" if reviewer_id.present?
+      
+      # Add reviewer data attributes if present
+      reviewer_data = ""
+      reviewer_html = ""
+      if reviewer_id.present? && reviewer
+        reviewer_data = %( data-reviewer-id="#{reviewer_id}" data-reviewer-name="#{reviewer.full_name}")
+        reviewer_html = %(<span class="reviewer-badge-parallel" data-reviewer-id="#{reviewer_id}">#{reviewer.full_name}</span>)
+      end
+      
+      # Generate the HTML structure
+      result_html = case list_style
+                    when 'bullet'
+                      %(<div class="#{css_classes.join(' ')}"#{reviewer_data}>
+                          <span class="node-marker">#{counter}</span>
+                          <span class="node-content">#{content_html}#{review_date_html}</span>
+                          #{reviewer_html}
+                        </div>)
+                    else
+                      %(<div class="#{css_classes.join(' ')}"#{reviewer_data}>
+                          <span class="node-marker">#{counter}.</span>
+                          <span class="node-content">#{content_html}#{review_date_html}</span>
+                          #{reviewer_html}
+                        </div>)
+                    end
+      result_html.html_safe
+    rescue => e
+      # Log the error with more context
+      Rails.logger.error "Error rendering HTML for ActionNode #{id}: #{e.message}"
+      Rails.logger.error e.backtrace.join("\n")
+      
+      # Return a safe, truncated plain-text version for display in case of error
+      # This prevents the entire request from failing and allows some visibility
+      truncated_content = content.truncate(200, omission: '... [Error rendering content]')
+      "Error: Failed to render content. Original content preview: \"#{truncated_content}\"".html_safe
     end
   end
 
