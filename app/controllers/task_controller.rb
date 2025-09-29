@@ -55,7 +55,8 @@ class TaskController < ApplicationController
                             .where('DATE(completed_at) <= ?', date)
                       else
                         Task.none
-                      end.order(completed_at: :desc)
+                      end
+    completed_tasks = completed_tasks.order(completed_at: :desc)
 
     render json: {
       active: serialize_tasks_with_versions(sorted_active_tasks),
@@ -149,6 +150,11 @@ class TaskController < ApplicationController
           )
         end
         
+        # Apply tags if provided
+        if params[:task][:tag_ids].is_a?(Array)
+          apply_tags!(task, params[:task][:tag_ids])
+        end
+
         # Update task's review_date based on node dates 
         task.update_review_date_from_nodes
         
@@ -207,6 +213,11 @@ class TaskController < ApplicationController
           )
         end
         
+        # Replace tags if provided
+        if params[:task][:tag_ids].is_a?(Array)
+          apply_tags!(@task, params[:task][:tag_ids])
+        end
+
         # NOW check for merge conflicts AFTER saving the new content
         last_approved = @task.versions.where(status: 'approved').order(version_number: :desc).first
         
@@ -563,7 +574,8 @@ class TaskController < ApplicationController
       } : nil,
       'editor_name' => task.editor.full_name,
       'editor_id' => task.editor.id,
-      'reviewer_info' => task.reviewer_info
+      'reviewer_info' => task.reviewer_info,
+      'tags' => task.tags.select(:id, :name)
     )
 
     # Add completion info if task is completed
@@ -572,6 +584,20 @@ class TaskController < ApplicationController
     end
 
     base_task
+  end
+
+  def apply_tags!(task, tag_ids)
+    tag_ids = tag_ids.map(&:to_i).uniq
+    existing_ids = task.tags.pluck(:id)
+
+    to_add = tag_ids - existing_ids
+    to_remove = existing_ids - tag_ids
+
+    TaskTag.where(task_id: task.id, tag_id: to_remove).delete_all if to_remove.any?
+
+    to_add.each do |tid|
+      TaskTag.create!(task_id: task.id, tag_id: tid, created_by_id: current_user.id)
+    end
   end
 
   def serialize_version_with_nodes(version)
@@ -687,7 +713,8 @@ class TaskController < ApplicationController
       :description,
       :original_date,
       :responsibility,
-      :review_date
+      :review_date,
+      tag_ids: []
     )
   end
 
@@ -714,7 +741,8 @@ class TaskController < ApplicationController
       :original_date,
       :responsibility,
       :review_date,
-      :status
+      :status,
+      tag_ids: []
     )
   end
 

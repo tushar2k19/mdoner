@@ -9,6 +9,8 @@ class Task < ApplicationRecord
   # has_many :comments, dependent: :destroy
   has_many :notifications, dependent: :destroy
   has_many :reviews, through: :versions
+  has_many :task_tags, dependent: :destroy
+  has_many :tags, through: :task_tags
   
   # Handle deletion properly
   # before_destroy :clear_current_version_and_versions
