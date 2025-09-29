@@ -73,6 +73,11 @@ Rails.application.routes.draw do
     get 'versions/:base_version_id/:current_version_id/diff' => 'review#diff'
   end
 
+  controller :tag do
+    get 'tags' => 'tag#index'
+    post 'tags' => 'tag#create'
+  end
+  
   # ActionNode routes nested under task versions
   scope 'task_versions/:task_version_id' do
     controller :action_node do

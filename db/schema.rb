@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2025_07_13_161719) do
+ActiveRecord::Schema[7.1].define(version: 2025_09_25_074630) do
   create_table "action_nodes", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.bigint "task_version_id", null: false
     t.bigint "parent_id"
@@ -35,8 +35,6 @@ ActiveRecord::Schema[7.1].define(version: 2025_07_13_161719) do
     t.bigint "review_id", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-    t.datetime "deleted_at"
-    t.index ["deleted_at"], name: "index_comment_trails_on_deleted_at"
     t.index ["review_id"], name: "index_comment_trails_on_review_id"
   end
 
@@ -80,11 +78,28 @@ ActiveRecord::Schema[7.1].define(version: 2025_07_13_161719) do
     t.text "summary"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-    t.datetime "deleted_at"
     t.index ["base_version_id"], name: "index_reviews_on_base_version_id"
-    t.index ["deleted_at"], name: "index_reviews_on_deleted_at"
     t.index ["reviewer_id"], name: "index_reviews_on_reviewer_id"
     t.index ["task_version_id"], name: "index_reviews_on_task_version_id"
+  end
+
+  create_table "tags", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
+    t.string "name", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["name"], name: "index_tags_on_name", unique: true
+  end
+
+  create_table "task_tags", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
+    t.bigint "task_id", null: false
+    t.bigint "tag_id", null: false
+    t.bigint "created_by_id"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["created_by_id"], name: "index_task_tags_on_created_by_id"
+    t.index ["tag_id"], name: "index_task_tags_on_tag_id"
+    t.index ["task_id", "tag_id"], name: "index_task_tags_on_task_id_and_tag_id", unique: true
+    t.index ["task_id"], name: "index_task_tags_on_task_id"
   end
 
   create_table "task_versions", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
@@ -96,9 +111,7 @@ ActiveRecord::Schema[7.1].define(version: 2025_07_13_161719) do
     t.text "change_description"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-    t.datetime "deleted_at"
     t.index ["base_version_id"], name: "index_task_versions_on_base_version_id"
-    t.index ["deleted_at"], name: "index_task_versions_on_deleted_at"
     t.index ["editor_id"], name: "index_task_versions_on_editor_id"
     t.index ["task_id"], name: "index_task_versions_on_task_id"
   end
@@ -136,6 +149,7 @@ ActiveRecord::Schema[7.1].define(version: 2025_07_13_161719) do
 
   add_foreign_key "action_nodes", "action_nodes", column: "parent_id"
   add_foreign_key "action_nodes", "task_versions"
+  add_foreign_key "action_nodes", "users", column: "reviewer_id"
   add_foreign_key "comment_trails", "reviews"
   add_foreign_key "comments", "action_nodes", on_delete: :nullify
   add_foreign_key "comments", "comment_trails"
@@ -146,6 +160,9 @@ ActiveRecord::Schema[7.1].define(version: 2025_07_13_161719) do
   add_foreign_key "reviews", "task_versions"
   add_foreign_key "reviews", "task_versions", column: "base_version_id"
   add_foreign_key "reviews", "users", column: "reviewer_id"
+  add_foreign_key "task_tags", "tags"
+  add_foreign_key "task_tags", "tasks"
+  add_foreign_key "task_tags", "users", column: "created_by_id"
   add_foreign_key "task_versions", "task_versions", column: "base_version_id"
   add_foreign_key "task_versions", "tasks"
   add_foreign_key "task_versions", "users", column: "editor_id"
