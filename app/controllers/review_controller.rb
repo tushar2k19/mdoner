@@ -108,27 +108,46 @@ class ReviewController < ApplicationController
       # Update review status
       @review.update!(status: 'approved')
       
-      # Update task version status
-      @review.task_version.update!(status: 'approved')
+      # Check if all reviews for this task version are now approved
+      task_version = @review.task_version
+      all_reviews = Review.where(task_version: task_version, status: ['pending', 'approved', 'changes_requested'])
       
-      # Set this as the current version of the task
-      @review.task_version.task.update!(current_version: @review.task_version)
-      
-      # Update task status to approved
-      @review.task_version.task.update!(status: 'approved')
-      
-      # Create notification for editor
-      Notification.create!(
-        recipient: @review.task_version.editor,
-        task: @review.task_version.task,
-        review: @review,
-        message: "Your task '#{@review.task_version.task.description}' has been approved",
-        notification_type: 'task_approved'
-      )
+      if all_reviews.all? { |review| review.status == 'approved' }
+        # All reviews approved - mark task as approved
+        task_version.update!(status: 'approved')
+        task_version.task.update!(current_version: task_version)
+        task_version.task.update!(status: 'approved')
+        
+        # Create notification for editor
+        Notification.create!(
+          recipient: task_version.editor,
+          task: task_version.task,
+          review: @review,
+          message: "Your task '#{task_version.task.description}' has been fully approved by all reviewers",
+          notification_type: 'task_approved'
+        )
+        
+        message = 'Review approved - Task fully approved by all reviewers'
+      else
+        # Some reviews still pending - task remains under review
+        pending_count = all_reviews.count { |review| review.status == 'pending' }
+        
+        # Create notification for editor about partial approval
+        Notification.create!(
+          recipient: task_version.editor,
+          task: task_version.task,
+          review: @review,
+          message: "Your task '#{task_version.task.description}' has been partially approved (#{pending_count} reviews pending)",
+          notification_type: 'partial_approval'
+        )
+        
+        message = "Review approved - #{pending_count} review(s) still pending"
+      end
       
       render json: {
         success: true,
-        message: 'Review approved successfully'
+        message: message,
+        all_reviews_approved: all_reviews.all? { |review| review.status == 'approved' }
       }
     end
   rescue ActiveRecord::RecordInvalid => e
@@ -263,6 +282,26 @@ class ReviewController < ApplicationController
     }
   end
 
+  # New endpoint for dashboard hover functionality
+  def reviewer_status_breakdown
+    task_version_id = params[:task_version_id]
+    
+    if task_version_id.present?
+      task_version = TaskVersion.find(task_version_id)
+      breakdown = Review.get_reviewer_status_breakdown(task_version)
+      
+      render json: {
+        success: true,
+        breakdown: breakdown
+      }
+    else
+      render json: {
+        success: false,
+        error: 'task_version_id is required'
+      }, status: :bad_request
+    end
+  end
+
   private
 
   def set_review
@@ -276,6 +315,9 @@ class ReviewController < ApplicationController
       summary: review.summary,
       created_at: review.created_at,
       updated_at: review.updated_at,
+      reviewer_type: review.reviewer_type,
+      assigned_node_ids: review.assigned_node_ids,
+      is_aggregate_review: review.is_aggregate_review,
       reviewer: {
         id: review.reviewer.id,
         name: review.reviewer.full_name,
@@ -291,6 +333,9 @@ class ReviewController < ApplicationController
       id: review.id,
       status: review.status,
       created_at: review.created_at,
+      reviewer_type: review.reviewer_type,
+      assigned_node_ids: review.assigned_node_ids,
+      is_aggregate_review: review.is_aggregate_review,
       task: {
         id: review.task_version.task.id,
         description: review.task_version.task.description,

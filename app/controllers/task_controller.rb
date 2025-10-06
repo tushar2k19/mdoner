@@ -265,46 +265,16 @@ class TaskController < ApplicationController
       # Find the last approved version for comparison (base version)
       base_version = @task.versions.where(status: 'approved').order(version_number: :desc).first
       
-      # Check if there's already a pending review for this task version
-      existing_review = Review.find_by(task_version: current_version, status: 'pending')
+      # Use new smart review creation logic
+      created_reviews = create_smart_reviews(current_version, base_version, reviewer_id)
       
-      if existing_review
-        # UPDATE EXISTING REVIEW: Update reviewer and base_version instead of creating new review
-        existing_review.update!(
-          reviewer: reviewer,
-          base_version: base_version # Update base_version to show only new changes
-        )
-        review = existing_review
+      if created_reviews.any?
+        # Send smart notifications only to reviewers with relevant changes
+        send_smart_notifications(created_reviews)
         
-        # Create notification for re-review
-        Notification.create!(
-          recipient: reviewer,
-          task: @task,
-          review: review,
-          message: "Content updated for task: #{@task.description}",
-          notification_type: 'review_request'
-        )
-        
-        message = 'Task updated and sent for re-review successfully'
+        message = "Task sent for review to #{created_reviews.count} reviewer(s)"
       else
-        # CREATE NEW REVIEW: First time sending for review
-        review = Review.create!(
-          task_version: current_version,
-          base_version: base_version, # nil if this is the first review
-          reviewer: reviewer,
-          status: 'pending'
-        )
-        
-        # Create notification for new review
-        Notification.create!(
-          recipient: reviewer,
-          task: @task,
-          review: review,
-          message: "New review requested for task: #{@task.description}",
-          notification_type: 'review_request'
-        )
-        
-        message = 'Task sent for review successfully'
+        message = 'No reviewers needed - no relevant changes detected'
       end
       
       # Update task status
@@ -312,7 +282,7 @@ class TaskController < ApplicationController
       
       render json: { 
         success: true, 
-        review_id: review.id,
+        review_ids: created_reviews.map(&:id),
         message: message
       }
       
@@ -1203,5 +1173,181 @@ class TaskController < ApplicationController
     else
       'balanced_merge'
     end
+  end
+
+  # New methods for smart multi-reviewer system
+  
+  def create_smart_reviews(current_version, base_version, task_level_reviewer_id)
+    created_reviews = []
+    
+    # Group nodes by assigned reviewer
+    nodes_by_reviewer = current_version.action_nodes.group_by(&:reviewer_id)
+    
+    Rails.logger.info "🔧 SMART REVIEW CREATION DEBUG:"
+    Rails.logger.info "🔧 Total nodes: #{current_version.action_nodes.count}"
+    Rails.logger.info "🔧 Nodes by reviewer: #{nodes_by_reviewer.transform_values(&:count)}"
+    Rails.logger.info "🔧 Task level reviewer ID: #{task_level_reviewer_id}"
+    
+    # Create task-level review for unassigned nodes + general oversight
+    unassigned_nodes = current_version.action_nodes.where(reviewer_id: nil)
+    Rails.logger.info "🔧 Unassigned nodes count: #{unassigned_nodes.count}"
+    
+    if unassigned_nodes.any? || task_level_reviewer_id.present?
+      task_level_review = create_task_level_review(
+        task_version: current_version,
+        base_version: base_version,
+        reviewer_id: task_level_reviewer_id,
+        unassigned_nodes: unassigned_nodes
+      )
+      created_reviews << task_level_review if task_level_review
+      Rails.logger.info "✅ Created task-level review: #{task_level_review&.id}"
+    end
+    
+    # Create node-level reviews for explicitly assigned nodes
+    nodes_by_reviewer.each do |reviewer_id, assigned_nodes|
+      next if reviewer_id.nil? # Skip unassigned nodes (handled above)
+      
+      Rails.logger.info "🔧 Processing reviewer #{reviewer_id} with #{assigned_nodes.count} nodes"
+      
+      # Check if any of the reviewer's assigned nodes have changed
+      changed_nodes = find_changed_nodes_for_reviewer(assigned_nodes, base_version)
+      
+      Rails.logger.info "🔧 Changed nodes for reviewer #{reviewer_id}: #{changed_nodes.count}"
+      
+      if changed_nodes.any?
+        node_level_review = create_node_level_review(
+          task_version: current_version,
+          base_version: base_version,
+          reviewer_id: reviewer_id,
+          assigned_nodes: changed_nodes
+        )
+        created_reviews << node_level_review if node_level_review
+        Rails.logger.info "✅ Created node-level review: #{node_level_review&.id} for reviewer #{reviewer_id}"
+      end
+    end
+    
+    Rails.logger.info "🔧 Total reviews created: #{created_reviews.count}"
+    created_reviews
+  end
+
+  def create_task_level_review(task_version:, base_version:, reviewer_id:, unassigned_nodes:)
+    # Check if there's already a pending task-level review for this version
+    existing_review = Review.find_by(
+      task_version: task_version, 
+      status: 'pending',
+      reviewer_type: 'task_level'
+    )
+    
+    if existing_review
+      # Update existing task-level review
+      existing_review.update!(
+        reviewer_id: reviewer_id,
+        base_version: base_version,
+        assigned_node_ids: unassigned_nodes.pluck(:id).to_json
+      )
+      existing_review
+    else
+      # Create new task-level review
+      Review.create!(
+        task_version: task_version,
+        base_version: base_version,
+        reviewer_id: reviewer_id,
+        status: 'pending',
+        reviewer_type: 'task_level',
+        is_aggregate_review: true,
+        assigned_node_ids: unassigned_nodes.pluck(:id).to_json
+      )
+    end
+  end
+
+  def create_node_level_review(task_version:, base_version:, reviewer_id:, assigned_nodes:)
+    # Check if there's already a pending node-level review for this reviewer
+    existing_review = Review.find_by(
+      task_version: task_version,
+      reviewer_id: reviewer_id,
+      status: 'pending',
+      reviewer_type: 'node_level'
+    )
+    
+    if existing_review
+      # Update existing node-level review
+      existing_review.update!(
+        base_version: base_version,
+        assigned_node_ids: assigned_nodes.pluck(:id).to_json
+      )
+      existing_review
+    else
+      # Create new node-level review
+      Review.create!(
+        task_version: task_version,
+        base_version: base_version,
+        reviewer_id: reviewer_id,
+        status: 'pending',
+        reviewer_type: 'node_level',
+        is_aggregate_review: false,
+        assigned_node_ids: assigned_nodes.pluck(:id).to_json
+      )
+    end
+  end
+
+  def find_changed_nodes_for_reviewer(assigned_nodes, base_version)
+    return assigned_nodes if base_version.nil? # First review - all nodes are "changed"
+    
+    assigned_nodes.select do |current_node|
+      # Check if this specific node has changed
+      base_node = base_version.action_nodes.find do |bn|
+        nodes_equivalent?(current_node, bn)
+      end
+      
+      # Node changed if it doesn't exist in base or content is different
+      base_node.nil? || !nodes_content_equal?(current_node, base_node)
+    end
+  end
+
+  def send_smart_notifications(created_reviews)
+    created_reviews.each do |review|
+      changed_nodes = review.changed_nodes
+      next unless changed_nodes.any? # Only notify if there are actual changes
+      
+      # Create targeted notification
+      Notification.create!(
+        recipient: review.reviewer,
+        task: @task,
+        review: review,
+        message: generate_smart_notification_message(changed_nodes, review),
+        notification_type: 'review_request'
+      )
+    end
+  end
+
+  def generate_smart_notification_message(changed_nodes, review)
+    node_count = changed_nodes.count
+    
+    if review.task_level_review?
+      if node_count == 1
+        "1 unassigned node has been modified in task: #{@task.description}"
+      else
+        "#{node_count} unassigned nodes have been modified in task: #{@task.description}"
+      end
+    else
+      if node_count == 1
+        "1 node you're assigned to has been modified in task: #{@task.description}"
+      else
+        "#{node_count} nodes you're assigned to have been modified in task: #{@task.description}"
+      end
+    end
+  end
+
+  def nodes_equivalent?(node1, node2)
+    # Compare content and structure, but not position (which can change)
+    node1.content.strip == node2.content.strip &&
+    node1.level == node2.level &&
+    node1.list_style == node2.list_style
+  end
+
+  def nodes_content_equal?(node1, node2)
+    node1.content.strip == node2.content.strip &&
+    node1.review_date == node2.review_date &&
+    node1.completed == node2.completed
   end
 end

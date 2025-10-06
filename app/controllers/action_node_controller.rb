@@ -39,7 +39,13 @@ class ActionNodeController < ApplicationController
   end
 
   def update
+    Rails.logger.info "🔧 UPDATING ACTION NODE: #{@action_node.id}"
+    Rails.logger.info "🔧 NODE PARAMS: #{node_params.inspect}"
+    Rails.logger.info "🔧 CURRENT REVIEWER_ID: #{@action_node.reviewer_id}"
+    
     if @action_node.update(node_params)
+      Rails.logger.info "✅ NODE UPDATE SUCCESS: reviewer_id=#{@action_node.reviewer_id}"
+      
       # Update review dates up the tree if review_date changed
       if @action_node.saved_change_to_review_date?
         @action_node.update_review_date
@@ -51,6 +57,7 @@ class ActionNodeController < ApplicationController
         data: serialize_node(@action_node)
       }
     else
+      Rails.logger.error "❌ NODE UPDATE FAILED: #{@action_node.errors.full_messages}"
       render json: {
         success: false,
         errors: @action_node.errors.full_messages

@@ -14,7 +14,12 @@ class Review < ApplicationRecord
     forwarded: 'forwarded' # New status for forwarded reviews
   }
   validates :reviewer, presence: true
+  validates :reviewer_type, inclusion: { in: %w[task_level node_level] }
   validate :consistent_versions
+  validate :assigned_node_ids_format
+
+  # Serialize assigned_node_ids as JSON
+  serialize :assigned_node_ids, JSON
 
 
   def diff
@@ -85,6 +90,71 @@ class Review < ApplicationRecord
             .map { |id| User.find(id) }
   end
 
+  # New methods for multi-reviewer support
+  
+  # Get the nodes assigned to this review
+  def assigned_nodes
+    return ActionNode.none unless assigned_node_ids.present?
+    
+    node_ids = assigned_node_ids.is_a?(String) ? JSON.parse(assigned_node_ids) : assigned_node_ids
+    task_version.all_action_nodes.where(id: node_ids)
+  end
+
+  # Get nodes that have changed for this reviewer
+  def changed_nodes
+    return ActionNode.none unless assigned_node_ids.present?
+    
+    current_nodes = assigned_nodes
+    return current_nodes if base_version.nil? # First review - all nodes are "changed"
+    
+    # Find which assigned nodes actually changed
+    current_nodes.select do |current_node|
+      base_node = base_version.all_action_nodes.find do |bn|
+        nodes_equivalent?(current_node, bn)
+      end
+      
+      base_node.nil? || !nodes_content_equal?(current_node, base_node)
+    end
+  end
+
+  # Check if this review has relevant changes for the reviewer
+  def has_relevant_changes_for_reviewer?
+    changed_nodes.any?
+  end
+
+  # Check if this is a task-level review
+  def task_level_review?
+    reviewer_type == 'task_level'
+  end
+
+  # Check if this is a node-level review
+  def node_level_review?
+    reviewer_type == 'node_level'
+  end
+
+  # Get reviewer status breakdown for dashboard
+  def self.get_reviewer_status_breakdown(task_version)
+    reviews = where(task_version: task_version)
+    breakdown = {
+      total_reviews: reviews.count,
+      approved_reviews: reviews.where(status: 'approved').count,
+      pending_reviews: reviews.where(status: 'pending').count,
+      changes_requested: reviews.where(status: 'changes_requested').count,
+      reviewers: reviews.includes(:reviewer).map do |review|
+        {
+          id: review.reviewer.id,
+          name: review.reviewer.full_name,
+          status: review.status,
+          reviewer_type: review.reviewer_type,
+          assigned_node_count: review.assigned_node_ids&.length || 0
+        }
+      end
+    }
+    
+    breakdown[:all_approved] = breakdown[:total_reviews] > 0 && breakdown[:approved_reviews] == breakdown[:total_reviews]
+    breakdown
+  end
+
   private
   
   def consistent_versions
@@ -93,6 +163,27 @@ class Review < ApplicationRecord
     
     if task_version.task_id != base_version.task_id
       errors.add(:base_version, "must belong to the same task")
+    end
+  end
+
+  def assigned_node_ids_format
+    return unless assigned_node_ids.present?
+    
+    begin
+      node_ids = assigned_node_ids.is_a?(String) ? JSON.parse(assigned_node_ids) : assigned_node_ids
+      unless node_ids.is_a?(Array)
+        errors.add(:assigned_node_ids, "must be an array of node IDs")
+        return
+      end
+      
+      # Validate that all node IDs exist in the task version
+      existing_node_ids = task_version.all_action_nodes.pluck(:id)
+      invalid_ids = node_ids - existing_node_ids
+      if invalid_ids.any?
+        errors.add(:assigned_node_ids, "contains invalid node IDs: #{invalid_ids.join(', ')}")
+      end
+    rescue JSON::ParserError
+      errors.add(:assigned_node_ids, "must be valid JSON")
     end
   end
   
