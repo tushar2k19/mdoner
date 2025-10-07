@@ -71,6 +71,7 @@ Rails.application.routes.draw do
     get 'review/:id/diff' => 'review#diff'
     get 'review/:id/comments' => 'review#comments'
     get 'versions/:base_version_id/:current_version_id/diff' => 'review#diff'
+    get 'reviews/status_breakdown' => 'review#reviewer_status_breakdown'
   end
 
   controller :tag do
