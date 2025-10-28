@@ -28,9 +28,5 @@ module ChhatisgarhBackend
     # Middleware like session, flash, cookies can be added back manually.
     # Skip views, helpers and assets when generating a new resource.
     config.api_only = true
-    
-    
-    # Alternatively, for production environments, you can disable host checking
-    # config.hosts.clear if Rails.env.production?
   end
 end
