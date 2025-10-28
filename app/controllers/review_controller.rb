@@ -328,6 +328,7 @@ class ReviewController < ApplicationController
     }
   end
 
+  
   def serialize_review_summary(review)
     {
       id: review.id,
