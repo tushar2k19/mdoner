@@ -7,11 +7,7 @@
 
 Rails.application.config.middleware.insert_before 0, Rack::Cors do
   allow do
-    origins "http://localhost:8081", 
-            "https://mdoner.netlify.app", 
-            "http://localhost:8080",
-            "https://mdoner-production.up.railway.app",
-            /https:\/\/.*\.railway\.app$/  # Allow all Railway domains
+    origins "http://localhost:8081", "https://mdoner.netlify.app", "http://localhost:8080"
 
     resource "*",
              headers: :any,

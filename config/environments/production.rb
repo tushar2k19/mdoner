@@ -85,11 +85,6 @@ Rails.application.configure do
   # But we can add production-specific hosts here if needed
   config.hosts << "mdoner-production.up.railway.app" unless config.hosts.frozen?
   
-  # Skip DNS rebinding protection for the default health check endpoint.
-  config.host_authorization = { exclude: ->(request) { request.path == "/up" } }
-  
-  # Enable public file serving for Railway (since we don't have NGINX)
-  config.public_file_server.enabled = ENV['RAILS_SERVE_STATIC_FILES'].present? || ENV['RENDER'].present?
 end
 
 #
