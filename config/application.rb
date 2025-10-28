@@ -28,5 +28,19 @@ module ChhatisgarhBackend
     # Middleware like session, flash, cookies can be added back manually.
     # Skip views, helpers and assets when generating a new resource.
     config.api_only = true
+    
+    # Allow all hosts for Railway deployment
+    # This is critical for Railway's dynamic domains and Metal Edge
+    config.hosts = [
+      IPAddr.new("0.0.0.0/0"),        # All IPv4 addresses
+      IPAddr.new("::/0"),             # All IPv6 addresses
+      "localhost",
+      "mdoner-production.up.railway.app",
+      /.*\.railway\.app/,             # All railway.app subdomains
+      /.*\.railway\.internal/         # Railway internal domains
+    ]
+    
+    # Alternatively, for production environments, you can disable host checking
+    # config.hosts.clear if Rails.env.production?
   end
 end
