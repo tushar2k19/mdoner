@@ -14,7 +14,7 @@ class Notification < ApplicationRecord
     changes_requested: 'changes_requested',
     task_completed: 'task_completed',
     comment_resolved: 'comment_resolved',
-
+    partial_approval: 'partial_approval'
   }
   validates :notification_type, presence: true
 
