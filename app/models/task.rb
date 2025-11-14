@@ -58,18 +58,29 @@ class Task < ApplicationRecord
     reviewers.any? ? reviewers.join(', ') : nil
   end
 
-  # Update task's review_date based on nearest review_date from all nodes
+  # Update task's review_date based on nearest future review_date from all nodes
   def update_review_date_from_nodes
     return unless current_version&.all_action_nodes&.any?
 
-    # Find the nearest (earliest) review_date from all nodes
-    nearest_date = current_version.all_action_nodes
+    # Get current date in IST (Indian Standard Time)
+    current_date_ist = Time.current.in_time_zone('Asia/Kolkata').to_date
+    
+    # Find the nearest future review_date from all nodes (including today)
+    future_dates = current_version.all_action_nodes
                                   .where.not(review_date: nil)
-                                  .minimum(:review_date)
-
-    if nearest_date && nearest_date != review_date
-      update_column(:review_date, nearest_date)
-      Rails.logger.info "Updated task #{id} review_date to #{nearest_date}"
+                                  .where('review_date >= ?', current_date_ist)
+                                  .pluck(:review_date)
+    
+    if future_dates.any?
+      nearest_future_date = future_dates.min
+      
+      if nearest_future_date != review_date
+        update_column(:review_date, nearest_future_date)
+        Rails.logger.info "Updated task #{id} review_date to #{nearest_future_date} (nearest future date from #{future_dates.count} nodes, current IST: #{current_date_ist})"
+      end
+    else
+      # If no future dates exist, keep the current review_date unchanged
+      Rails.logger.info "No future dates found for task #{id}, keeping current review_date: #{review_date} (current IST: #{current_date_ist})"
     end
   end
 

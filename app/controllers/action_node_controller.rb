@@ -25,6 +25,8 @@ class ActionNodeController < ApplicationController
     if @action_node.persisted?
       # Update parent review dates if necessary
       @action_node.parent&.update_review_date
+      # Update task review date based on all nodes
+      @task_version.task.update_review_date_from_nodes
       
       render json: {
         success: true,
@@ -50,6 +52,8 @@ class ActionNodeController < ApplicationController
       if @action_node.saved_change_to_review_date?
         @action_node.update_review_date
         @action_node.parent&.update_review_date
+        # Update task review date based on all nodes
+        @task_version.task.update_review_date_from_nodes
       end
       
       render json: {
@@ -70,6 +74,8 @@ class ActionNodeController < ApplicationController
       # Update parent review dates after deletion
       parent = @action_node.parent
       parent&.update_review_date
+      # Update task review date after node deletion
+      @task_version.task.update_review_date_from_nodes
       
       render json: { success: true }
     else

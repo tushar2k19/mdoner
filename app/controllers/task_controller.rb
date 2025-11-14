@@ -201,6 +201,8 @@ class TaskController < ApplicationController
           root_nodes = current_version.action_nodes.order(:position)
           root_nodes.each(&:safe_destroy)
           create_action_nodes_for_version(current_version, params[:action_nodes])
+          # Update task review date based on new nodes
+          @task.update_review_date_from_nodes
         elsif params[:task][:action_to_be_taken].present?
           # Fallback: update with HTML content
           root_nodes = current_version.action_nodes.order(:position)
@@ -211,6 +213,8 @@ class TaskController < ApplicationController
             list_style: 'paragraph',
             node_type: 'paragraph'
           )
+          # Update task review date based on new content
+          @task.update_review_date_from_nodes
         end
         
         # Replace tags if provided
