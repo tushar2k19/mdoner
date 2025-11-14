@@ -105,12 +105,22 @@ class ReviewController < ApplicationController
 
   def approve
     ActiveRecord::Base.transaction do
+      Rails.logger.info "🔧 APPROVAL DEBUG: Starting approval for review #{@review.id}"
+      Rails.logger.info "🔧 Review assigned_node_ids: #{@review.assigned_node_ids.inspect}"
+      Rails.logger.info "🔧 Task version status before: #{@review.task_version.status}"
+      
       # Update review status
       @review.update!(status: 'approved')
+      
+      Rails.logger.info "🔧 Review status updated to: #{@review.status}"
+      Rails.logger.info "🔧 Task version status after: #{@review.task_version.status}"
       
       # Check if all reviews for this task version are now approved
       task_version = @review.task_version
       all_reviews = Review.where(task_version: task_version, status: ['pending', 'approved', 'changes_requested'])
+      
+      Rails.logger.info "🔧 Total reviews for task version: #{all_reviews.count}"
+      Rails.logger.info "🔧 Review statuses: #{all_reviews.pluck(:id, :status).inspect}"
       
       if all_reviews.all? { |review| review.status == 'approved' }
         # All reviews approved - mark task as approved
