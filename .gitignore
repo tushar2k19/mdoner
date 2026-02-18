@@ -66,4 +66,7 @@ Thumbs.db
 *.tmp
 *.temp
 
+# Railway CLI link (local project/service link – do not commit)
+.railway/
+
 # /config/database.yml
