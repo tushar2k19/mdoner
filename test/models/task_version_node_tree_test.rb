@@ -28,6 +28,18 @@ class TaskVersionNodeTreeTest < ActiveSupport::TestCase
     assert_equal "2", @nodes[:point2].display_counter
     assert_equal "i", @nodes[:subsubpoint1].display_counter
   end
+
+  test "add_action_node accepts explicit position for delta path" do
+    inserted = @version.add_action_node(
+      content: "<positioned root>",
+      level: 1,
+      list_style: "decimal",
+      node_type: "point",
+      position: 2
+    )
+
+    assert_equal 2, inserted.position
+  end
 end
 
 

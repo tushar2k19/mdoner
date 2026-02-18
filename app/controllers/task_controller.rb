@@ -19,9 +19,10 @@ class TaskController < ApplicationController
                      Task.includes(
                        :editor,
                        :tags,
-                       current_version: {
-                         all_action_nodes: [:reviewer, :parent]
-                       }
+                       current_version: [
+                         :editor,
+                         { all_action_nodes: [:reviewer, :parent] }
+                       ]
                      ).where.not(status: 'completed')
                          .where('DATE(created_at) <= ?', date)
                    when 'reviewer'
@@ -35,9 +36,10 @@ class TaskController < ApplicationController
                      Task.includes(
                        :editor,
                        :tags,
-                       current_version: {
-                         all_action_nodes: [:reviewer, :parent]
-                       }
+                       current_version: [
+                         :editor,
+                         { all_action_nodes: [:reviewer, :parent] }
+                       ]
                      ).where(id: task_ids)
                          .where.not(status: 'completed')
                          .where('DATE(created_at) <= ?', date)
@@ -53,9 +55,10 @@ class TaskController < ApplicationController
                         Task.includes(
                           :editor,
                           :tags,
-                          current_version: {
-                            all_action_nodes: [:reviewer, :parent]
-                          }
+                          current_version: [
+                            :editor,
+                            { all_action_nodes: [:reviewer, :parent] }
+                          ]
                         ).where(status: 'completed')
                             .where('DATE(completed_at) <= ?', date)
                       when 'reviewer'
@@ -68,9 +71,10 @@ class TaskController < ApplicationController
                         Task.includes(
                           :editor,
                           :tags,
-                          current_version: {
-                            all_action_nodes: [:reviewer, :parent]
-                          }
+                          current_version: [
+                            :editor,
+                            { all_action_nodes: [:reviewer, :parent] }
+                          ]
                         ).where(id: task_ids, status: 'completed')
                             .where('DATE(completed_at) <= ?', date)
                       else
@@ -93,9 +97,10 @@ class TaskController < ApplicationController
                        Task.includes(
                          :editor,
                          :tags,
-                         current_version: {
-                           all_action_nodes: [:reviewer, :parent]
-                         }
+                         current_version: [
+                           :editor,
+                           { all_action_nodes: [:reviewer, :parent] }
+                         ]
                        ).where(status: :approved)
                            .where('DATE(updated_at) <= ?', date)
                            .where(completed_at: nil)
@@ -110,9 +115,10 @@ class TaskController < ApplicationController
                        Task.includes(
                          :editor,
                          :tags,
-                         current_version: {
-                           all_action_nodes: [:reviewer, :parent]
-                         }
+                         current_version: [
+                           :editor,
+                           { all_action_nodes: [:reviewer, :parent] }
+                         ]
                        ).where(id: task_ids, status: :approved)
                            .where('DATE(updated_at) <= ?', date)
                            .where(completed_at: nil)
@@ -133,9 +139,10 @@ class TaskController < ApplicationController
     base_query = Task.includes(
       :editor,
       :tags,
-      current_version: {
-        all_action_nodes: [:reviewer, :parent]
-      }
+      current_version: [
+        :editor,
+        { all_action_nodes: [:reviewer, :parent] }
+      ]
     ).where.not(completed_at: nil)
                      .where('DATE(completed_at) <= ?', date)
 
@@ -195,7 +202,7 @@ class TaskController < ApplicationController
         
         render json: { 
           success: true, 
-          data: serialize_task_with_version(task.reload)
+          data: serialize_task_with_version(task_for_serialization(task))
         }
       else
         render json: { error: task.errors.full_messages }, status: :unprocessable_entity
@@ -232,25 +239,22 @@ class TaskController < ApplicationController
         
         # SAVE NEW CONTENT FIRST before checking merge conflicts
         if params[:action_nodes].present?
-          # Clear existing nodes safely (children first, then parents)
-          root_nodes = current_version.action_nodes.order(:position)
-          root_nodes.each(&:safe_destroy)
-          create_action_nodes_for_version(current_version, params[:action_nodes])
-          # Update task review date based on new nodes
-          @task.update_review_date_from_nodes
+          # Delta apply: update/create/delete only changed nodes
+          apply_action_nodes_delta(current_version, params[:action_nodes])
         elsif params[:task][:action_to_be_taken].present?
           # Fallback: update with HTML content
-          root_nodes = current_version.action_nodes.order(:position)
-          root_nodes.each(&:safe_destroy)
+          current_version.destroy_all_nodes_efficiently
           current_version.add_action_node(
             content: strip_html_tags(params[:task][:action_to_be_taken]),
             level: 1,
             list_style: 'paragraph',
             node_type: 'paragraph'
           )
-          # Update task review date based on new content
-          @task.update_review_date_from_nodes
         end
+
+        # Update task review date once after content mutations.
+        # Keep this before merge check so merge-conflict responses still reflect latest derived date.
+        @task.update_review_date_from_nodes if params[:action_nodes].present? || params[:task][:action_to_be_taken].present?
         
         # Replace tags if provided
         if params[:task][:tag_ids].is_a?(Array)
@@ -276,12 +280,9 @@ class TaskController < ApplicationController
           }
         end
         
-        # Update task's review_date based on node dates (no sorting)
-        current_version.update_and_resort_nodes
-        
         render json: { 
           success: true, 
-          data: serialize_task_with_version(@task.reload)
+          data: serialize_task_with_version(task_for_serialization(@task))
         }
       else
         render json: { error: @task.errors.full_messages }, status: :unprocessable_entity
@@ -562,6 +563,18 @@ class TaskController < ApplicationController
 
   private
 
+  # Re-fetch task with full eager loading for single-task serialization (avoids N+1 on Save response)
+  def task_for_serialization(task)
+    Task.includes(
+      :editor,
+      :tags,
+      current_version: [
+        :editor,
+        { all_action_nodes: [:reviewer, :parent] }
+      ]
+    ).find(task.id)
+  end
+
   def serialize_tasks_with_versions(tasks)
     tasks.map { |task| serialize_task_with_version(task) }
   end
@@ -726,18 +739,18 @@ class TaskController < ApplicationController
 
   def serialize_node_with_counter(node, display_counter)
     {
-      id: node.id,
-      content: node.content,
-      level: node.level,
-      list_style: node.list_style,
-      node_type: node.node_type,
-      position: node.position,
-      review_date: node.review_date,
-      completed: node.completed,
-      parent_id: node.parent_id,
-      display_counter: display_counter, # Use pre-calculated counter
-      reviewer_id: node.reviewer_id,
-      reviewer_name: node.reviewer&.first_name  # Include reviewer name if reviewer exists
+      'id' => node.id,
+      'content' => node.content,
+      'level' => node.level,
+      'list_style' => node.list_style,
+      'node_type' => node.node_type,
+      'position' => node.position,
+      'review_date' => node.review_date,
+      'completed' => node.completed,
+      'parent_id' => node.parent_id,
+      'display_counter' => display_counter, # Use pre-calculated counter
+      'reviewer_id' => node.reviewer_id,
+      'reviewer_name' => node.reviewer&.first_name  # Include reviewer name if reviewer exists
     }
   end
 
@@ -793,6 +806,96 @@ class TaskController < ApplicationController
         node_mapping[node_data['id'].to_i] = new_node
       end
     end
+  end
+
+  # Delta apply to avoid delete-all + recreate flow.
+  # Source of truth for ordering is payload order within siblings.
+  def apply_action_nodes_delta(version, nodes_data)
+    flat_nodes = flatten_node_structure(nodes_data)
+
+    existing_nodes = version.all_action_nodes.to_a
+    existing_by_id = existing_nodes.index_by(&:id)
+    temp_to_created = {}
+    seen_existing_ids = {}
+    sibling_positions = Hash.new(0)
+
+    flat_nodes.each do |node_data|
+      node_id = node_data['id']&.to_i
+      parent_ref = node_data['parent_id']
+      parent_ref_i = parent_ref.nil? ? nil : parent_ref.to_i
+
+      parent_node = resolve_delta_parent_node!(
+        version: version,
+        parent_ref_i: parent_ref_i,
+        existing_by_id: existing_by_id,
+        temp_to_created: temp_to_created
+      )
+
+      sibling_key = parent_ref_i
+      sibling_positions[sibling_key] += 1
+      payload_position = sibling_positions[sibling_key]
+
+      attrs = {
+        content: node_data['content'],
+        level: node_data['level'] || 1,
+        list_style: node_data['list_style'] || 'decimal',
+        node_type: node_data['node_type'] || 'point',
+        review_date: node_data['review_date'],
+        completed: node_data['completed'] || false,
+        reviewer_id: node_data['reviewer_id'],
+        parent_id: parent_node&.id,
+        position: payload_position
+      }
+
+      if node_id && node_id > 0
+        existing = existing_by_id[node_id]
+        unless existing
+          version.errors.add(:base, "Invalid node id #{node_id} for version #{version.id}")
+          raise ActiveRecord::RecordInvalid.new(version)
+        end
+
+        existing.assign_attributes(attrs)
+        existing.save! if existing.changed?
+        seen_existing_ids[node_id] = true
+      else
+        created = version.add_action_node(
+          content: attrs[:content],
+          level: attrs[:level],
+          list_style: attrs[:list_style],
+          node_type: attrs[:node_type],
+          parent: parent_node,
+          review_date: attrs[:review_date],
+          completed: attrs[:completed],
+          reviewer_id: attrs[:reviewer_id],
+          position: attrs[:position]
+        )
+
+        temp_to_created[node_id] = created if node_id && node_id < 0
+      end
+    end
+
+    to_delete = existing_nodes.reject { |node| seen_existing_ids[node.id] }
+    to_delete.sort_by { |node| -node.level }.each(&:destroy!)
+  end
+
+  def resolve_delta_parent_node!(version:, parent_ref_i:, existing_by_id:, temp_to_created:)
+    return nil if parent_ref_i.nil?
+
+    if parent_ref_i < 0
+      parent_node = temp_to_created[parent_ref_i]
+      unless parent_node
+        version.errors.add(:base, "Unresolved temporary parent id #{parent_ref_i}")
+        raise ActiveRecord::RecordInvalid.new(version)
+      end
+      return parent_node
+    end
+
+    parent_node = existing_by_id[parent_ref_i]
+    unless parent_node
+      version.errors.add(:base, "Unresolved existing parent id #{parent_ref_i}")
+      raise ActiveRecord::RecordInvalid.new(version)
+    end
+    parent_node
   end
   
   def flatten_node_structure(nodes_data)

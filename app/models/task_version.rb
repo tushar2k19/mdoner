@@ -30,8 +30,8 @@ class TaskVersion < ApplicationRecord
   # ActionNode Management Methods
 
   # Add a new node to this version
-  def add_action_node(content:, level: 1, list_style: 'decimal', node_type: 'point', parent: nil, review_date: nil, completed: false, reviewer_id: nil)
-    position = calculate_next_position(parent)
+  def add_action_node(content:, level: 1, list_style: 'decimal', node_type: 'point', parent: nil, review_date: nil, completed: false, reviewer_id: nil, position: nil)
+    position ||= calculate_next_position(parent)
     
     all_action_nodes.create!(
       content: content,
@@ -99,11 +99,29 @@ class TaskVersion < ApplicationRecord
     all_action_nodes.at_level(level)
   end
 
+
+  # Destroy all action nodes efficiently (avoids N+1 from recursive safe_destroy)
+  def destroy_all_nodes_efficiently
+    all_nodes = all_action_nodes.to_a
+    return if all_nodes.empty?
+
+    nodes_by_id = all_nodes.index_by(&:id)
+    depth_of = lambda do |node|
+      return 0 if node.parent_id.nil?
+      parent = nodes_by_id[node.parent_id]
+      parent ? 1 + depth_of.call(parent) : 0
+    end
+
+    ids_by_depth_desc = all_nodes.sort_by { |n| -depth_of.call(n) }.map(&:id)
+    ids_by_depth_desc.each { |id| ActionNode.find(id).destroy }
+  end
+
   # Bulk update review dates and re-sort
   def update_and_resort_nodes
     # Only update task's review_date based on nearest node dates - no sorting
     task.update_review_date_from_nodes
   end
+
 
   # Check if this version has any content differences from base version
   def has_content_changes?
