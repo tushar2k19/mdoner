@@ -30,7 +30,7 @@ class TaskController < ApplicationController
                                      .where(reviewer: current_user)
                                      .where.not(status: 'approved')
                                      .pluck('task_versions.task_id')
-                                     .uniq
+                                     .uniq 
                      
                      Task.includes(
                        :editor,
