@@ -7,7 +7,22 @@ class ReviewController < ApplicationController
     reviews = Review.joins(:task_version)
                    .where('reviews.reviewer_id = ? OR task_versions.editor_id = ?', 
                           current_user.id, current_user.id)
-                   .includes({task_version: [:task, :editor]}, :base_version, :reviewer, {comment_trail: :comments})
+                   .includes(
+                     {
+                       task_version: [
+                         :task,
+                         :editor,
+                         {
+                           all_action_nodes: [:reviewer, :parent]
+                         }
+                       ]
+                     },
+                     :base_version,
+                     :reviewer,
+                     {
+                       comment_trail: :comments
+                     }
+                   )
                    .order(created_at: :desc)
     
     render json: {
@@ -315,7 +330,22 @@ class ReviewController < ApplicationController
   private
 
   def set_review
-    @review = Review.find(params[:id])
+    @review = Review.includes(
+      {
+        task_version: [
+          :task,
+          :editor,
+          {
+            all_action_nodes: [:reviewer, :parent]
+          }
+        ]
+      },
+      :base_version,
+      :reviewer,
+      {
+        comment_trail: :comments
+      }
+    ).find(params[:id])
   end
 
   def serialize_review(review)

@@ -11,7 +11,9 @@ development:
 
 test:
   <<: *default
-  database: chhatisgarh_test
+  database: mdoner_test
+  variables:
+    foreign_key_checks: 0
 
 production:
   url: <%= ENV['DATABASE_URL'] %>

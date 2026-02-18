@@ -64,8 +64,29 @@ class TaskVersion < ApplicationRecord
 
   # Get the complete node tree structure
   def node_tree
-    root_nodes = action_nodes.order(:position)
-    build_tree_structure(root_nodes)
+    # Use preloaded nodes (assumes eager loading from controller)
+    all_nodes = all_action_nodes.to_a
+    build_tree_structure_in_memory(all_nodes)
+  end
+
+  # Build tree structure from preloaded nodes (no additional queries)
+  def build_tree_structure_in_memory(nodes)
+    # Group nodes by parent_id for O(1) lookup
+    nodes_by_parent = nodes.group_by(&:parent_id)
+    
+    # Recursive helper to build tree
+    build_subtree = lambda do |parent_id|
+      child_nodes = nodes_by_parent[parent_id] || []
+      child_nodes.sort_by(&:position).map do |node|
+        {
+          node: node,
+          children: build_subtree.call(node.id)
+        }
+      end
+    end
+    
+    # Start with root nodes (parent_id is nil)
+    build_subtree.call(nil)
   end
 
   # Get all nodes sorted by review date
@@ -101,8 +122,9 @@ class TaskVersion < ApplicationRecord
   end
 
   # Get HTML formatted content for dashboard display  
-  def html_formatted_content
-    format_html_tree_nodes(node_tree).join("")
+  # OPTIMIZATION: Accept optional pre-calculated counters map to avoid N+1
+  def html_formatted_content(counters_map = nil)
+    format_html_tree_nodes(node_tree, counters_map).join("")
   end
 
   # Gets all reviewers involved (for notifications)
@@ -173,18 +195,22 @@ class TaskVersion < ApplicationRecord
     formatted_lines
   end
 
-  def format_html_tree_nodes(tree_nodes)
+  def format_html_tree_nodes(tree_nodes, counters_map = nil)
     formatted_html = []
     tree_nodes.each do |tree_item|
-      # Generate the current node's HTML
-      node_html = tree_item[:node].html_formatted_display
+      node = tree_item[:node]
+      # Use pre-calculated counter if available, otherwise fallback to DB query
+      counter = counters_map ? counters_map[node.id] : node.display_counter
+      
+      # Generate the current node's HTML with the counter
+      node_html = node.html_formatted_display(counter)
       
       # If this node has children, we need to include them in a hierarchical structure
       if tree_item[:children].any?
         # For nodes with children, we maintain the flat structure but ensure proper ordering
         # The CSS handles indentation via level classes
         formatted_html << node_html
-        formatted_html.concat(format_html_tree_nodes(tree_item[:children]))
+        formatted_html.concat(format_html_tree_nodes(tree_item[:children], counters_map))
       else
         # Leaf nodes are added as-is
         formatted_html << node_html
@@ -247,16 +273,6 @@ class TaskVersion < ApplicationRecord
       'lower-roman'  # i, ii, iii...
     else
       'bullet'       # • for deeper levels
-    end
-  end
-
-  # Build hierarchical tree structure from flat nodes
-  def build_tree_structure(nodes)
-    nodes.map do |node|
-      {
-        node: node,
-        children: build_tree_structure(node.children.order(:position))
-      }
     end
   end
 

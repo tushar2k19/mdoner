@@ -16,8 +16,13 @@ class TaskController < ApplicationController
     active_tasks = case current_user.role
                    when 'editor'
                      # Editors see all active tasks with their current versions
-                     Task.includes(:editor, :current_version)
-                         .where.not(status: 'completed')
+                     Task.includes(
+                       :editor,
+                       :tags,
+                       current_version: {
+                         all_action_nodes: [:reviewer, :parent]
+                       }
+                     ).where.not(status: 'completed')
                          .where('DATE(created_at) <= ?', date)
                    when 'reviewer'
                      # Reviewers see tasks where they have pending or active reviews
@@ -27,8 +32,13 @@ class TaskController < ApplicationController
                                      .pluck('task_versions.task_id')
                                      .uniq
                      
-                     Task.includes(:editor, :current_version)
-                         .where(id: task_ids)
+                     Task.includes(
+                       :editor,
+                       :tags,
+                       current_version: {
+                         all_action_nodes: [:reviewer, :parent]
+                       }
+                     ).where(id: task_ids)
                          .where.not(status: 'completed')
                          .where('DATE(created_at) <= ?', date)
                    else
@@ -40,8 +50,13 @@ class TaskController < ApplicationController
 
     completed_tasks = case current_user.role
                       when 'editor'
-                        Task.includes(:editor, :current_version)
-                            .where(status: 'completed')
+                        Task.includes(
+                          :editor,
+                          :tags,
+                          current_version: {
+                            all_action_nodes: [:reviewer, :parent]
+                          }
+                        ).where(status: 'completed')
                             .where('DATE(completed_at) <= ?', date)
                       when 'reviewer'
                         # Completed tasks where reviewer was involved
@@ -50,8 +65,13 @@ class TaskController < ApplicationController
                                         .pluck('task_versions.task_id')
                                         .uniq
                         
-                        Task.includes(:editor, :current_version)
-                            .where(id: task_ids, status: 'completed')
+                        Task.includes(
+                          :editor,
+                          :tags,
+                          current_version: {
+                            all_action_nodes: [:reviewer, :parent]
+                          }
+                        ).where(id: task_ids, status: 'completed')
                             .where('DATE(completed_at) <= ?', date)
                       else
                         Task.none
@@ -70,8 +90,13 @@ class TaskController < ApplicationController
     # Get tasks with approved current versions (for Final Dashboard)
     approved_tasks = case current_user.role
                      when 'editor'
-                       Task.includes(:editor, :current_version)
-                           .where(status: :approved)
+                       Task.includes(
+                         :editor,
+                         :tags,
+                         current_version: {
+                           all_action_nodes: [:reviewer, :parent]
+                         }
+                       ).where(status: :approved)
                            .where('DATE(updated_at) <= ?', date)
                            .where(completed_at: nil)
                      when 'reviewer'
@@ -82,8 +107,13 @@ class TaskController < ApplicationController
                                        .pluck('task_versions.task_id')
                                        .uniq
                        
-                       Task.includes(:editor, :current_version)
-                           .where(id: task_ids, status: :approved)
+                       Task.includes(
+                         :editor,
+                         :tags,
+                         current_version: {
+                           all_action_nodes: [:reviewer, :parent]
+                         }
+                       ).where(id: task_ids, status: :approved)
                            .where('DATE(updated_at) <= ?', date)
                            .where(completed_at: nil)
                      else
@@ -100,8 +130,13 @@ class TaskController < ApplicationController
 
   def completed_tasks
     date = params[:date] ? Date.parse(params[:date]) : Date.today
-    base_query = Task.includes(:editor, :current_version)
-                     .where.not(completed_at: nil)
+    base_query = Task.includes(
+      :editor,
+      :tags,
+      current_version: {
+        all_action_nodes: [:reviewer, :parent]
+      }
+    ).where.not(completed_at: nil)
                      .where('DATE(completed_at) <= ?', date)
 
     tasks = case current_user.role
@@ -535,24 +570,47 @@ class TaskController < ApplicationController
     base_task = task.as_json
     current_version = task.current_version
 
+    # OPTIMIZATION: Pre-calculate everything in one pass for this version
+    if current_version
+      tree = current_version.node_tree
+      # Calculate counters for the tree structure in memory
+      calculate_display_counters(tree)
+      
+      # Extract flat map of [node_id => counter] for HTML generation
+      counters_map = {}
+      extract_counters = lambda do |nodes|
+        nodes.each do |item|
+          counters_map[item[:node].id] = item[:display_counter]
+          extract_counters.call(item[:children]) if item[:children].any?
+        end
+      end
+      extract_counters.call(tree)
+      
+      # Generate optimized JSON and HTML using the SAME counters
+      action_nodes_json = serialize_flat_with_counters(tree)
+      html_content = current_version.html_formatted_content(counters_map)
+    else
+      action_nodes_json = []
+      html_content = ""
+    end
+
     # Add version-specific data
     base_task.merge!(
-      'action_to_be_taken' => task.action_to_be_taken,
+      'action_to_be_taken' => html_content,
       'current_version' => current_version ? {
         'id' => current_version.id,
         'version_number' => current_version.version_number,
         'status' => current_version.status,
         'editor_name' => current_version.editor.full_name,
         'editor_id' => current_version.editor.id,
-        'action_nodes' => serialize_flat_node_hierarchy(current_version.node_tree)
+        'action_nodes' => action_nodes_json
       } : nil,
       'editor_name' => task.editor.full_name,
       'editor_id' => task.editor.id,
       'reviewer_info' => task.reviewer_info,
-      'tags' => task.tags.select(:id, :name)
+      'tags' => task.tags.to_a.map { |t| { id: t.id, name: t.name } }
     )
 
-    # Add completion info if task is completed
     if task.completed?
       base_task['completed_at'] = task.completed_at
     end
@@ -596,15 +654,94 @@ class TaskController < ApplicationController
   end
 
   def serialize_flat_node_hierarchy(tree_nodes)
-    # Convert tree structure to flat hierarchy for frontend subtask calculations
+    # Pre-calculate all counters first
+    tree_with_counters = calculate_display_counters(tree_nodes)
+    
+    # Convert tree structure to flat hierarchy
+    serialize_flat_with_counters(tree_with_counters)
+  end
+
+  def serialize_flat_with_counters(tree_nodes)
     tree_nodes.map do |tree_item|
-      node = serialize_node(tree_item[:node])
-      # Always include children array (empty if no children) for frontend compatibility
-      node['children'] = tree_item[:children].any? ? serialize_flat_node_hierarchy(tree_item[:children]) : []
+      node = serialize_node_with_counter(tree_item[:node], tree_item[:display_counter])
+      node['children'] = tree_item[:children].any? ? serialize_flat_with_counters(tree_item[:children]) : []
       node
     end
   end
 
+  # Pre-calculate all display counters in one pass
+  def calculate_display_counters(tree_nodes)
+    # Recursive helper to calculate counters
+    calculate_for_tree = lambda do |nodes, parent_id|
+      # Group siblings by list_style
+      nodes_by_style = nodes.group_by { |item| item[:node].list_style }
+      
+      nodes_by_style.each do |list_style, style_nodes|
+        # Sort by position within each style group
+        sorted_nodes = style_nodes.sort_by { |item| item[:node].position }
+        
+        # Assign counter to each node in this group
+        sorted_nodes.each_with_index do |tree_item, index|
+          counter_position = index + 1
+          counter = case list_style
+                    when 'decimal'
+                      counter_position.to_s
+                    when 'lower-alpha'
+                      (96 + counter_position).chr # a, b, c...
+                    when 'lower-roman'
+                      to_roman_numeral(counter_position).downcase
+                    when 'bullet'
+                      '•'
+                    else
+                      counter_position.to_s
+                    end
+          
+          tree_item[:display_counter] = counter
+          
+          # Recursively process children
+          calculate_for_tree.call(tree_item[:children], tree_item[:node].id) if tree_item[:children].any?
+        end
+      end
+    end
+    
+    calculate_for_tree.call(tree_nodes, nil)
+    tree_nodes
+  end
+
+  # Roman numeral helper
+  def to_roman_numeral(number)
+    return '' if number <= 0
+    
+    values = [1000, 900, 500, 400, 100, 90, 50, 40, 10, 9, 5, 4, 1]
+    literals = ['M', 'CM', 'D', 'CD', 'C', 'XC', 'L', 'XL', 'X', 'IX', 'V', 'IV', 'I']
+    
+    roman = ''
+    values.each_with_index do |value, index|
+      count = number / value
+      roman += literals[index] * count
+      number -= value * count
+    end
+    roman
+  end
+
+  def serialize_node_with_counter(node, display_counter)
+    {
+      id: node.id,
+      content: node.content,
+      level: node.level,
+      list_style: node.list_style,
+      node_type: node.node_type,
+      position: node.position,
+      review_date: node.review_date,
+      completed: node.completed,
+      parent_id: node.parent_id,
+      display_counter: display_counter, # Use pre-calculated counter
+      reviewer_id: node.reviewer_id,
+      reviewer_name: node.reviewer&.first_name  # Include reviewer name if reviewer exists
+    }
+  end
+
+  # Keep old method for other endpoints that don't use tree structure
   def serialize_node(node)
     {
       id: node.id,

@@ -49,11 +49,14 @@ class Task < ApplicationRecord
   def reviewer_info
     return nil unless current_version
     
-    reviewers = current_version.all_action_nodes
-                              .joins(:reviewer)
-                              .select('DISTINCT users.first_name, users.last_name')
-                              .reorder('users.first_name, users.last_name')
-                              .map { |node| "#{node.first_name} #{node.last_name}" }
+    # OPTIMIZATION: Use preloaded action nodes if available to avoid DB queries
+    nodes = current_version.all_action_nodes.to_a
+    
+    reviewers = nodes.map(&:reviewer)
+                     .compact
+                     .map(&:full_name)
+                     .uniq
+                     .sort
     
     reviewers.any? ? reviewers.join(', ') : nil
   end

@@ -140,9 +140,10 @@ class ActionNode < ApplicationRecord
   end
 
   # Get formatted HTML display with counter, indentation and styling for dashboard
-  def html_formatted_display
+  # OPTIMIZATION: Accept optional pre-calculated counter to avoid N+1
+  def html_formatted_display(precalculated_counter = nil)
     begin
-      counter = display_counter
+      counter = precalculated_counter || display_counter
       content_html = html_content
       
       # Format review date if present
