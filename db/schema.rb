@@ -10,8 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2025_09_25_074630) do
-  execute "SET FOREIGN_KEY_CHECKS = 0"
+ActiveRecord::Schema[7.1].define(version: 2026_02_18_090000) do
   create_table "action_nodes", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.bigint "task_version_id", null: false
     t.bigint "parent_id"
@@ -26,9 +25,11 @@ ActiveRecord::Schema[7.1].define(version: 2025_09_25_074630) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.bigint "reviewer_id"
+    t.string "stable_node_id"
     t.index ["deleted_at"], name: "index_action_nodes_on_deleted_at"
     t.index ["parent_id"], name: "index_action_nodes_on_parent_id"
     t.index ["reviewer_id"], name: "index_action_nodes_on_reviewer_id"
+    t.index ["stable_node_id"], name: "index_action_nodes_on_stable_node_id"
     t.index ["task_version_id"], name: "index_action_nodes_on_task_version_id"
   end
 
@@ -36,6 +37,8 @@ ActiveRecord::Schema[7.1].define(version: 2025_09_25_074630) do
     t.bigint "review_id", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.datetime "deleted_at"
+    t.index ["deleted_at"], name: "index_comment_trails_on_deleted_at"
     t.index ["review_id"], name: "index_comment_trails_on_review_id"
   end
 
@@ -79,10 +82,12 @@ ActiveRecord::Schema[7.1].define(version: 2025_09_25_074630) do
     t.text "summary"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.datetime "deleted_at"
     t.text "assigned_node_ids", comment: "JSON array of ActionNode IDs assigned to this review"
     t.string "reviewer_type", default: "task_level", comment: "Type of review: 'task_level' or 'node_level'"
     t.boolean "is_aggregate_review", default: false, comment: "True for task-level reviews that oversee multiple nodes"
     t.index ["base_version_id"], name: "index_reviews_on_base_version_id"
+    t.index ["deleted_at"], name: "index_reviews_on_deleted_at"
     t.index ["is_aggregate_review"], name: "index_reviews_on_is_aggregate_review"
     t.index ["reviewer_id"], name: "index_reviews_on_reviewer_id"
     t.index ["reviewer_type"], name: "index_reviews_on_reviewer_type"
@@ -117,7 +122,9 @@ ActiveRecord::Schema[7.1].define(version: 2025_09_25_074630) do
     t.text "change_description"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.datetime "deleted_at"
     t.index ["base_version_id"], name: "index_task_versions_on_base_version_id"
+    t.index ["deleted_at"], name: "index_task_versions_on_deleted_at"
     t.index ["editor_id"], name: "index_task_versions_on_editor_id"
     t.index ["task_id"], name: "index_task_versions_on_task_id"
   end
@@ -175,5 +182,4 @@ ActiveRecord::Schema[7.1].define(version: 2025_09_25_074630) do
   add_foreign_key "tasks", "task_versions", column: "current_version_id"
   add_foreign_key "tasks", "users", column: "editor_id"
   add_foreign_key "tasks", "users", column: "reviewer_id"
-  execute "SET FOREIGN_KEY_CHECKS = 1"
 end
