@@ -1,4 +1,5 @@
 class ReviewController < ApplicationController
+  include NodeTreeSerializer
   # before_action :authorize_access_request!
   before_action :set_review, only: [:show, :update, :approve, :reject, :forward, :comments]
 
@@ -47,7 +48,8 @@ class ReviewController < ApplicationController
     end
     
     # Get nodes with diff status applied
-    nodes_with_diff = serialize_node_tree_with_diff(@review.task_version.node_tree, diff_data)
+    tree_nodes = @review.task_version.node_tree
+    tree_with_counters = calculate_display_counters(tree_nodes)
     
     # Get comment trail for this review
     comment_trail = @review.comment_trail
@@ -57,7 +59,7 @@ class ReviewController < ApplicationController
       data: {
         review: serialize_review(@review),
         task: serialize_task(@review.task_version.task),
-        nodes: serialize_node_tree_with_diff(@review.task_version.node_tree, diff_data),
+        nodes: serialize_node_tree_with_diff(tree_with_counters, diff_data),
         diff: diff_data,
         comment_trails: comment_trail ? [serialize_comment_trail(comment_trail)] : [],
         current_user: {
@@ -439,13 +441,13 @@ class ReviewController < ApplicationController
       diff_status = get_node_diff_status(node, diff_data)
       
       {
-        node: serialize_node_with_diff(node, diff_status),
+        node: serialize_node_with_diff(node, diff_status, tree_item[:display_counter], tree_item[:formatted_display]),
         children: serialize_node_tree_with_diff(tree_item[:children], diff_data)
       }
     end
   end
 
-  def serialize_node_with_diff(node, diff_status)
+  def serialize_node_with_diff(node, diff_status, display_counter, formatted_display)
     {
       id: node.id,
       content: node.content,
@@ -457,8 +459,8 @@ class ReviewController < ApplicationController
       review_date: node.review_date,
       completed: node.completed,
       parent_id: node.parent_id,
-      display_counter: node.display_counter,
-      formatted_display: node.formatted_display,
+      display_counter: display_counter,
+      formatted_display: formatted_display,
       has_rich_formatting: node.has_rich_formatting?,
       diff_status: diff_status, # added, modified, deleted, unchanged
       created_at: node.created_at,

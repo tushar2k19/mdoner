@@ -1,5 +1,6 @@
 # app/controllers/action_node_controller.rb
 class ActionNodeController < ApplicationController
+  include NodeTreeSerializer
 #   before_action :authorize_access_request!
   before_action :set_task_version
   before_action :set_action_node, only: [:show, :update, :destroy, :toggle_complete, :move_node]
@@ -224,6 +225,11 @@ class ActionNodeController < ApplicationController
   end
 
   def serialize_node(node)
+    # Fallback for single node serialization
+    serialize_node_with_precalculated(node, node.display_counter, node.formatted_display)
+  end
+
+  def serialize_node_with_precalculated(node, display_counter, formatted_display)
     {
       id: node.id,
       content: node.content,
@@ -235,8 +241,8 @@ class ActionNodeController < ApplicationController
       review_date: node.review_date,
       completed: node.completed,
       parent_id: node.parent_id,
-      display_counter: node.display_counter,
-      formatted_display: node.formatted_display,
+      display_counter: display_counter,
+      formatted_display: formatted_display,
       has_rich_formatting: node.has_rich_formatting?,
       reviewer_id: node.reviewer_id,
       reviewer_name: node.reviewer&.full_name,
@@ -246,10 +252,15 @@ class ActionNodeController < ApplicationController
   end
 
   def serialize_node_tree(tree_nodes)
+    tree_with_counters = calculate_display_counters(tree_nodes)
+    serialize_tree_with_counters(tree_with_counters)
+  end
+
+  def serialize_tree_with_counters(tree_nodes)
     tree_nodes.map do |tree_item|
       {
-        node: serialize_node(tree_item[:node]),
-        children: serialize_node_tree(tree_item[:children])
+        node: serialize_node_with_precalculated(tree_item[:node], tree_item[:display_counter], tree_item[:formatted_display]),
+        children: serialize_tree_with_counters(tree_item[:children])
       }
     end
   end

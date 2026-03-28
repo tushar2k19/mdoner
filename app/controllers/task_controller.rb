@@ -1,4 +1,6 @@
 class TaskController < ApplicationController
+  include NodeTreeSerializer
+
   # before_action :authorize_access_request!
   before_action :set_task, only: [
     :update,
@@ -658,12 +660,35 @@ class TaskController < ApplicationController
   end
 
   def serialize_node_tree(tree_nodes)
+    tree_with_counters = calculate_display_counters(tree_nodes)
+    serialize_tree_with_counters(tree_with_counters)
+  end
+
+  def serialize_tree_with_counters(tree_nodes)
     tree_nodes.map do |tree_item|
       {
-        node: serialize_node(tree_item[:node]),
-        children: serialize_node_tree(tree_item[:children])
+        node: serialize_node_with_precalculated(tree_item[:node], tree_item[:display_counter], tree_item[:formatted_display]),
+        children: serialize_tree_with_counters(tree_item[:children])
       }
     end
+  end
+
+  def serialize_node_with_precalculated(node, display_counter, formatted_display)
+    {
+      id: node.id,
+      content: node.content,
+      level: node.level,
+      list_style: node.list_style,
+      node_type: node.node_type,
+      position: node.position,
+      review_date: node.review_date,
+      completed: node.completed,
+      parent_id: node.parent_id,
+      display_counter: display_counter,
+      formatted_display: formatted_display,
+      reviewer_id: node.reviewer_id,
+      reviewer_name: node.reviewer&.first_name  # Include reviewer name if reviewer exists
+    }
   end
 
   def serialize_flat_node_hierarchy(tree_nodes)
@@ -680,61 +705,6 @@ class TaskController < ApplicationController
       node['children'] = tree_item[:children].any? ? serialize_flat_with_counters(tree_item[:children]) : []
       node
     end
-  end
-
-  # Pre-calculate all display counters in one pass
-  def calculate_display_counters(tree_nodes)
-    # Recursive helper to calculate counters
-    calculate_for_tree = lambda do |nodes, parent_id|
-      # Group siblings by list_style
-      nodes_by_style = nodes.group_by { |item| item[:node].list_style }
-      
-      nodes_by_style.each do |list_style, style_nodes|
-        # Sort by position within each style group
-        sorted_nodes = style_nodes.sort_by { |item| item[:node].position }
-        
-        # Assign counter to each node in this group
-        sorted_nodes.each_with_index do |tree_item, index|
-          counter_position = index + 1
-          counter = case list_style
-                    when 'decimal'
-                      counter_position.to_s
-                    when 'lower-alpha'
-                      (96 + counter_position).chr # a, b, c...
-                    when 'lower-roman'
-                      to_roman_numeral(counter_position).downcase
-                    when 'bullet'
-                      '•'
-                    else
-                      counter_position.to_s
-                    end
-          
-          tree_item[:display_counter] = counter
-          
-          # Recursively process children
-          calculate_for_tree.call(tree_item[:children], tree_item[:node].id) if tree_item[:children].any?
-        end
-      end
-    end
-    
-    calculate_for_tree.call(tree_nodes, nil)
-    tree_nodes
-  end
-
-  # Roman numeral helper
-  def to_roman_numeral(number)
-    return '' if number <= 0
-    
-    values = [1000, 900, 500, 400, 100, 90, 50, 40, 10, 9, 5, 4, 1]
-    literals = ['M', 'CM', 'D', 'CD', 'C', 'XC', 'L', 'XL', 'X', 'IX', 'V', 'IV', 'I']
-    
-    roman = ''
-    values.each_with_index do |value, index|
-      count = number / value
-      roman += literals[index] * count
-      number -= value * count
-    end
-    roman
   end
 
   def serialize_node_with_counter(node, display_counter)
@@ -778,6 +748,7 @@ class TaskController < ApplicationController
     
     # Create nodes in order, handling parent relationships
     node_mapping = {} # Map temp IDs to real IDs
+    sibling_positions = Hash.new(0) # Track positions in memory
     
     flat_nodes.each do |node_data|
       # Handle parent relationship
@@ -790,6 +761,10 @@ class TaskController < ApplicationController
         parent_node = version.all_action_nodes.find_by(id: node_data['parent_id'])
       end
       
+      # Use in-memory position tracking to avoid N+1 SELECT MAX queries
+      parent_id_key = parent_node&.id
+      sibling_positions[parent_id_key] += 1
+      
       new_node = version.add_action_node(
         content: node_data['content'],
         level: node_data['level'] || 1,
@@ -798,7 +773,8 @@ class TaskController < ApplicationController
         parent: parent_node,
         review_date: node_data['review_date'],
         completed: node_data['completed'] || false,
-        reviewer_id: node_data['reviewer_id'] # Add reviewer_id when recreating nodes
+        reviewer_id: node_data['reviewer_id'],
+        position: sibling_positions[parent_id_key] # Pass position directly
       )
       
       # Store mapping for temporary IDs
