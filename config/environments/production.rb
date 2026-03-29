@@ -85,8 +85,11 @@ Rails.application.configure do
   #   "example.com",     # Allow requests from example.com
   #   /.*\.example\.com/ # Allow requests from subdomains like `www.example.com`
   # ]
-  # Skip DNS rebinding protection for the default health check endpoint.
-  # config.host_authorization = { exclude: ->(request) { request.path == "/up" } }
+  # Railway (and other platforms) hit /up over HTTP with internal Host headers — do not block.
+  config.host_authorization = { exclude: ->(request) { request.path == "/up" } }
+
+  # Health probes use plain HTTP inside the edge network; do not 301/302 them to HTTPS.
+  config.ssl_options = { redirect: { exclude: ->(request) { request.path == "/up" } } }
 end
 
 #
