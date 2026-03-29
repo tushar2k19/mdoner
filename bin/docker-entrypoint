@@ -1,11 +1,9 @@
 #!/bin/bash -e
 
-# If running the rails server then create or migrate existing database.
-# MySQL on Railway may be waking from serverless sleep or slow DNS; db:prepare
-# can fail with ETIMEDOUT (110) — retry until DB is reachable (within healthcheck window).
-if [ "${1}" == "./bin/rails" ] && [ "${2}" == "server" ]; then
-  max=60
-  attempt=0
+# MySQL on Railway may be waking from sleep; db:prepare can fail with ETIMEDOUT (110).
+db_prepare_with_retry() {
+  local max=60
+  local attempt=0
   until ./bin/rails db:prepare; do
     attempt=$((attempt + 1))
     if [ "${attempt}" -ge "${max}" ]; then
@@ -15,6 +13,16 @@ if [ "${1}" == "./bin/rails" ] && [ "${2}" == "server" ]; then
     echo "db:prepare failed (attempt ${attempt}/${max}), retrying in 5s..."
     sleep 5
   done
+}
+
+# Dockerfile CMD: ./bin/rails server -b 0.0.0.0
+if [ "${1}" == "./bin/rails" ] && [ "${2}" == "server" ]; then
+  db_prepare_with_retry
+fi
+
+# Railway dashboard / legacy start: sh -c "bin/rails db:prepare && bundle exec puma ..."
+if { [ "${1}" == "sh" ] || [ "${1}" == "/bin/sh" ]; } && [ "${2}" == "-c" ]; then
+  db_prepare_with_retry
 fi
 
 exec "${@}"
