@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_02_18_090000) do
+ActiveRecord::Schema[7.1].define(version: 2026_03_28_230843) do
   create_table "action_nodes", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.bigint "task_version_id", null: false
     t.bigint "parent_id"
@@ -86,6 +86,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_02_18_090000) do
     t.text "assigned_node_ids", comment: "JSON array of ActionNode IDs assigned to this review"
     t.string "reviewer_type", default: "task_level", comment: "Type of review: 'task_level' or 'node_level'"
     t.boolean "is_aggregate_review", default: false, comment: "True for task-level reviews that oversee multiple nodes"
+    t.datetime "last_reminder_sent_at"
     t.index ["base_version_id"], name: "index_reviews_on_base_version_id"
     t.index ["deleted_at"], name: "index_reviews_on_deleted_at"
     t.index ["is_aggregate_review"], name: "index_reviews_on_is_aggregate_review"

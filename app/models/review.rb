@@ -23,54 +23,27 @@ class Review < ApplicationRecord
 
 
   def diff
-    {
-      added_nodes: added_nodes,
-      removed_nodes: removed_nodes,
-      modified_nodes: modified_nodes
-    }
+    # Use the optimized unified diff engine from TaskVersion
+    return {
+      added_nodes: task_version.all_action_nodes,
+      removed_nodes: [],
+      modified_nodes: [],
+      moved_nodes: []
+    } if base_version.nil?
+
+    task_version.diff_with(base_version)
   end
 
   def added_nodes
-    # If base_version is nil (first review), all nodes are considered "added"
-    return task_version.all_action_nodes if base_version.nil?
-    
-    # Find nodes in task_version that don't exist in base_version
-    task_version.all_action_nodes.reject do |current_node|
-      base_version.all_action_nodes.any? do |base_node|
-        nodes_equivalent?(current_node, base_node)
-      end
-    end
+    diff[:added_nodes]
   end
 
   def removed_nodes
-    # If base_version is nil (first review), no nodes are "removed"
-    return ActionNode.none if base_version.nil?
-    
-    # Find nodes in base_version that don't exist in task_version
-    base_version.all_action_nodes.reject do |base_node|
-      task_version.all_action_nodes.any? do |current_node|
-        nodes_equivalent?(current_node, base_node)
-      end
-    end
+    diff[:removed_nodes]
   end
 
   def modified_nodes
-    # If base_version is nil (first review), no nodes are "modified"
-    return ActionNode.none if base_version.nil?
-    
-    # Find nodes that exist in both versions but have different content
-    modified = []
-    task_version.all_action_nodes.each do |current_node|
-      base_node = base_version.all_action_nodes.find do |bn|
-        nodes_structurally_equivalent?(current_node, bn)
-      end
-      
-      if base_node && !nodes_content_equal?(current_node, base_node)
-        modified << current_node
-      end
-    end
-    
-    modified
+    diff[:modified_nodes]
   end
 
   def forward_to(new_reviewer)

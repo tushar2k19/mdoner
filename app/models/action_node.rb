@@ -18,6 +18,7 @@ class ActionNode < ApplicationRecord
   validates :content, presence: true
   validates :position, presence: true
   before_validation :set_default_position, on: :create
+  before_validation :set_stable_node_id, on: :create
 
   # Automatic sorting
   default_scope { order(position: :asc) }
@@ -233,6 +234,10 @@ class ActionNode < ApplicationRecord
   end
 
   private
+
+  def set_stable_node_id
+    self.stable_node_id ||= SecureRandom.uuid
+  end
 
   def strip_html_tags(html_content)
     html_content.gsub(/<[^>]*>/, '').strip

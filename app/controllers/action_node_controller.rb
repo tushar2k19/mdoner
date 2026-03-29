@@ -232,6 +232,7 @@ class ActionNodeController < ApplicationController
   def serialize_node_with_precalculated(node, display_counter, formatted_display)
     {
       id: node.id,
+      stable_node_id: node.stable_node_id,
       content: node.content,
       html_content: node.html_content,
       level: node.level,

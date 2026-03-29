@@ -157,10 +157,62 @@ class TaskVersion < ApplicationRecord
     current_nodes = all_action_nodes.includes(:parent).to_a
     other_nodes = other_version.all_action_nodes.includes(:parent).to_a
     
+    current_by_stable = current_nodes.select { |n| n.stable_node_id.present? }.group_by(&:stable_node_id)
+    other_by_stable = other_nodes.select { |n| n.stable_node_id.present? }.group_by(&:stable_node_id)
+
+    added = []
+    removed = []
+    modified = []
+    moved = []
+
+    # Track which current nodes we've matched to baseline nodes
+    matched_current_node_ids = Set.new
+
+    # Process all other_nodes (baseline) to find matches and removals
+    other_nodes.each do |other_node|
+      current_node = nil
+      
+      if other_node.stable_node_id.present? && current_by_stable.key?(other_node.stable_node_id)
+        current_node = current_by_stable[other_node.stable_node_id].first
+      else
+        # Fallback: find the first unmatched current node with identical structure
+        # (Same stripped content, level, and list_style)
+        current_node = current_nodes.find do |cn|
+          !matched_current_node_ids.include?(cn.id) && nodes_structurally_equivalent?(cn, other_node)
+        end
+      end
+      
+      if current_node
+        matched_current_node_ids.add(current_node.id)
+        
+        # Check for modifications (content, date, or completion changed)
+        is_modified = !nodes_content_equal?(current_node, other_node)
+        
+        # Check for moves (position, level, or parent changed)
+        is_moved = current_node.position != other_node.position || 
+                   current_node.level != other_node.level ||
+                   (current_node.parent&.stable_node_id.present? && current_node.parent&.stable_node_id != other_node.parent&.stable_node_id) ||
+                   (current_node.parent_id != other_node.parent_id && !(current_node.parent&.stable_node_id && current_node.parent&.stable_node_id == other_node.parent&.stable_node_id))
+
+        modified << current_node if is_modified
+        moved << current_node if is_moved && !is_modified
+      else
+        removed << other_node
+      end
+    end
+
+    # Process all current_nodes to find additions (anything not matched)
+    current_nodes.each do |current_node|
+      unless matched_current_node_ids.include?(current_node.id)
+        added << current_node
+      end
+    end
+
     {
-      added_nodes: find_added_nodes(current_nodes, other_nodes),
-      removed_nodes: find_removed_nodes(current_nodes, other_nodes),
-      modified_nodes: find_modified_nodes(current_nodes, other_nodes)
+      added_nodes: added,
+      removed_nodes: removed,
+      modified_nodes: modified,
+      moved_nodes: moved
     }
   end
 
@@ -258,7 +310,8 @@ class TaskVersion < ApplicationRecord
       review_date: source_node.review_date,
       completed: source_node.completed,
       parent: new_parent,
-      reviewer_id: source_node.reviewer_id # Preserve reviewer_id when copying
+      reviewer_id: source_node.reviewer_id, # Preserve reviewer_id when copying
+      stable_node_id: source_node.stable_node_id # Preserve stable identity across versions
     )
     
     node_mapping[source_node.id] = new_node.id

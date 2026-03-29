@@ -1,4 +1,5 @@
 class TaskController < ApplicationController
+  include ActionNodePersister
   include NodeTreeSerializer
 
   # before_action :authorize_access_request!
@@ -10,6 +11,7 @@ class TaskController < ApplicationController
     :resolve_merge,
     :merge_analysis,
     :apply_merge,
+    :review_cycle,
   ]
   def index
     date = params[:date] ? Date.parse(params[:date]) : Date.today
@@ -275,6 +277,7 @@ class TaskController < ApplicationController
             current_user_version: serialize_version_with_nodes(current_version.reload),
             latest_approved_version: serialize_version_with_nodes(last_approved),
             base_version: serialize_version_with_nodes(current_version.base_version),
+            baseline_nodes: current_version.base_version ? serialize_node_tree(current_version.base_version.node_tree) : [],
             diff_analysis: generate_three_way_diff_analysis(current_version, last_approved),
             merge_suggestions: generate_merge_suggestions(current_version, last_approved),
             auto_mergeable_count: count_auto_mergeable_changes(current_version, last_approved),
@@ -352,6 +355,68 @@ class TaskController < ApplicationController
       render json: { error: "Internal server error" }, status: :internal_server_error
     end
   end
+
+  # Editor-only: live status of all reviews for the task's current version (this cycle).
+  def review_cycle
+    unless @task.editor_id == current_user.id
+      render json: { success: false, error: 'Forbidden' }, status: :forbidden
+      return
+    end
+
+    cv = @task.current_version
+    unless cv
+      render json: { success: false, error: 'No current version' }, status: :not_found
+      return
+    end
+
+    cycle_reviews = Review.where(task_version_id: cv.id)
+                          .where(status: %w[pending approved changes_requested])
+                          .includes(:reviewer)
+                          .order(:created_at)
+
+    review_ids = cycle_reviews.map(&:id)
+    comments_per_review = if review_ids.empty?
+                            {}
+                          else
+                            Comment.joins(:comment_trail)
+                                   .where(comment_trails: { review_id: review_ids })
+                                   .group('comment_trails.review_id')
+                                   .count
+                          end
+
+    rows = cycle_reviews.map { |r| serialize_review_hub_row(r, comments_per_review: comments_per_review) }
+    pending = rows.count { |r| r[:status] == 'pending' }
+    approved = rows.count { |r| r[:status] == 'approved' }
+    # KPI: total comments across all reviews this cycle (matches sum of per-row "Changes requested")
+    changes_requested = rows.sum { |r| (r[:comments_count] || 0).to_i }
+
+    render json: {
+      success: true,
+      data: {
+        task: {
+          id: @task.id,
+          description: @task.description,
+          sector_division: @task.sector_division,
+          responsibility: @task.responsibility,
+          review_date: @task.review_date,
+          status: @task.status
+        },
+        task_version: {
+          id: cv.id,
+          version_number: cv.version_number,
+          status: cv.status
+        },
+        reviews: rows,
+        summary: {
+          total: rows.size,
+          pending: pending,
+          approved: approved,
+          changes_requested: changes_requested
+        }
+      }
+    }
+  end
+
   # def approve
   #   case current_user.role
   #   when 'reviewer'
@@ -489,6 +554,7 @@ class TaskController < ApplicationController
         current_user_version: serialize_version_with_nodes(current_version),
         latest_approved_version: serialize_version_with_nodes(last_approved),
         base_version: serialize_version_with_nodes(base_version),
+        baseline_nodes: base_version ? serialize_node_tree(base_version.node_tree) : [],
         diff_analysis: generate_three_way_diff_analysis(current_version, last_approved),
         merge_suggestions: generate_merge_suggestions(current_version, last_approved),
         
@@ -524,11 +590,8 @@ class TaskController < ApplicationController
     return render json: { error: 'No merged content provided' }, status: :unprocessable_entity unless merged_nodes.present?
     
     ActiveRecord::Base.transaction do
-      # Clear existing nodes in V2 (current_version)
-      current_version.all_action_nodes.destroy_all
-      
-      # Create new nodes with merged content
-      create_action_nodes_for_version(current_version, merged_nodes)
+      # Apply delta to update nodes instead of destroying and recreating
+      apply_action_nodes_delta(current_version, merged_nodes)
       
       # Update base_version to point to V3 for proper review comparison
       current_version.update!(base_version: last_approved) if last_approved
@@ -633,6 +696,30 @@ class TaskController < ApplicationController
     base_task
   end
 
+  def serialize_review_hub_row(review, comments_per_review: {})
+    assigned = review.assigned_node_ids
+    count = assigned.is_a?(Array) ? assigned.length : 0
+    cid = review.id
+    comment_total = comments_per_review[cid] || comments_per_review[cid.to_s] || 0
+    {
+      id: review.id,
+      status: review.status,
+      reviewer_type: review.reviewer_type,
+      is_aggregate_review: review.is_aggregate_review,
+      assigned_node_ids: assigned,
+      assigned_node_count: count,
+      created_at: review.created_at,
+      updated_at: review.updated_at,
+      last_reminder_sent_at: review.last_reminder_sent_at,
+      comments_count: comment_total,
+      reviewer: {
+        id: review.reviewer.id,
+        name: review.reviewer.full_name,
+        email: review.reviewer.email
+      }
+    }
+  end
+
   def apply_tags!(task, tag_ids)
     tag_ids = tag_ids.map(&:to_i).uniq
     existing_ids = task.tags.pluck(:id)
@@ -676,6 +763,7 @@ class TaskController < ApplicationController
   def serialize_node_with_precalculated(node, display_counter, formatted_display)
     {
       id: node.id,
+      stable_node_id: node.stable_node_id,
       content: node.content,
       level: node.level,
       list_style: node.list_style,
@@ -710,6 +798,7 @@ class TaskController < ApplicationController
   def serialize_node_with_counter(node, display_counter)
     {
       'id' => node.id,
+      'stable_node_id' => node.stable_node_id,
       'content' => node.content,
       'level' => node.level,
       'list_style' => node.list_style,
@@ -728,6 +817,7 @@ class TaskController < ApplicationController
   def serialize_node(node)
     {
       id: node.id,
+      stable_node_id: node.stable_node_id,
       content: node.content,
       level: node.level,
       list_style: node.list_style,
@@ -740,157 +830,6 @@ class TaskController < ApplicationController
       reviewer_id: node.reviewer_id,
       reviewer_name: node.reviewer&.first_name  # Include reviewer name if reviewer exists
     }
-  end
-
-  def create_action_nodes_for_version(version, nodes_data)
-    # Handle both flat and hierarchical node structures
-    flat_nodes = flatten_node_structure(nodes_data)
-    
-    # Create nodes in order, handling parent relationships
-    node_mapping = {} # Map temp IDs to real IDs
-    sibling_positions = Hash.new(0) # Track positions in memory
-    
-    flat_nodes.each do |node_data|
-      # Handle parent relationship
-      parent_node = nil
-      if node_data['parent_id'] && node_data['parent_id'].to_i < 0
-        # Temporary parent ID - look up in mapping
-        parent_node = node_mapping[node_data['parent_id'].to_i]
-      elsif node_data['parent_id'] && node_data['parent_id'].to_i > 0
-        # Real parent ID
-        parent_node = version.all_action_nodes.find_by(id: node_data['parent_id'])
-      end
-      
-      # Use in-memory position tracking to avoid N+1 SELECT MAX queries
-      parent_id_key = parent_node&.id
-      sibling_positions[parent_id_key] += 1
-      
-      new_node = version.add_action_node(
-        content: node_data['content'],
-        level: node_data['level'] || 1,
-        list_style: node_data['list_style'] || 'decimal',
-        node_type: node_data['node_type'] || 'point',
-        parent: parent_node,
-        review_date: node_data['review_date'],
-        completed: node_data['completed'] || false,
-        reviewer_id: node_data['reviewer_id'],
-        position: sibling_positions[parent_id_key] # Pass position directly
-      )
-      
-      # Store mapping for temporary IDs
-      if node_data['id'] && node_data['id'].to_i < 0
-        node_mapping[node_data['id'].to_i] = new_node
-      end
-    end
-  end
-
-  # Delta apply to avoid delete-all + recreate flow.
-  # Source of truth for ordering is payload order within siblings.
-  def apply_action_nodes_delta(version, nodes_data)
-    flat_nodes = flatten_node_structure(nodes_data)
-
-    existing_nodes = version.all_action_nodes.to_a
-    existing_by_id = existing_nodes.index_by(&:id)
-    temp_to_created = {}
-    seen_existing_ids = {}
-    sibling_positions = Hash.new(0)
-
-    flat_nodes.each do |node_data|
-      node_id = node_data['id']&.to_i
-      parent_ref = node_data['parent_id']
-      parent_ref_i = parent_ref.nil? ? nil : parent_ref.to_i
-
-      parent_node = resolve_delta_parent_node!(
-        version: version,
-        parent_ref_i: parent_ref_i,
-        existing_by_id: existing_by_id,
-        temp_to_created: temp_to_created
-      )
-
-      sibling_key = parent_ref_i
-      sibling_positions[sibling_key] += 1
-      payload_position = sibling_positions[sibling_key]
-
-      attrs = {
-        content: node_data['content'],
-        level: node_data['level'] || 1,
-        list_style: node_data['list_style'] || 'decimal',
-        node_type: node_data['node_type'] || 'point',
-        review_date: node_data['review_date'],
-        completed: node_data['completed'] || false,
-        reviewer_id: node_data['reviewer_id'],
-        parent_id: parent_node&.id,
-        position: payload_position
-      }
-
-      if node_id && node_id > 0
-        existing = existing_by_id[node_id]
-        unless existing
-          version.errors.add(:base, "Invalid node id #{node_id} for version #{version.id}")
-          raise ActiveRecord::RecordInvalid.new(version)
-        end
-
-        existing.assign_attributes(attrs)
-        existing.save! if existing.changed?
-        seen_existing_ids[node_id] = true
-      else
-        created = version.add_action_node(
-          content: attrs[:content],
-          level: attrs[:level],
-          list_style: attrs[:list_style],
-          node_type: attrs[:node_type],
-          parent: parent_node,
-          review_date: attrs[:review_date],
-          completed: attrs[:completed],
-          reviewer_id: attrs[:reviewer_id],
-          position: attrs[:position]
-        )
-
-        temp_to_created[node_id] = created if node_id && node_id < 0
-      end
-    end
-
-    to_delete = existing_nodes.reject { |node| seen_existing_ids[node.id] }
-    to_delete.sort_by { |node| -node.level }.each(&:destroy!)
-  end
-
-  def resolve_delta_parent_node!(version:, parent_ref_i:, existing_by_id:, temp_to_created:)
-    return nil if parent_ref_i.nil?
-
-    if parent_ref_i < 0
-      parent_node = temp_to_created[parent_ref_i]
-      unless parent_node
-        version.errors.add(:base, "Unresolved temporary parent id #{parent_ref_i}")
-        raise ActiveRecord::RecordInvalid.new(version)
-      end
-      return parent_node
-    end
-
-    parent_node = existing_by_id[parent_ref_i]
-    unless parent_node
-      version.errors.add(:base, "Unresolved existing parent id #{parent_ref_i}")
-      raise ActiveRecord::RecordInvalid.new(version)
-    end
-    parent_node
-  end
-  
-  def flatten_node_structure(nodes_data)
-    # If nodes_data is already flat, return as is
-    return nodes_data unless nodes_data.first&.key?('children')
-    
-    # Otherwise, flatten hierarchical structure
-    flat_nodes = []
-    nodes_data.each do |node_item|
-      if node_item.key?('node')
-        # Tree structure: {node: {...}, children: [...]}
-        flat_nodes << node_item['node']
-        flat_nodes.concat(flatten_node_structure(node_item['children'])) if node_item['children']&.any?
-      else
-        # Already flat structure
-        flat_nodes << node_item
-      end
-    end
-    flat_nodes
   end
 
   def strip_html_tags(html_content)
@@ -1357,6 +1296,7 @@ class TaskController < ApplicationController
   def serialize_node_for_conflict(node)
     {
       id: node.id,
+      stable_node_id: node.stable_node_id,
       content: node.content,
       level: node.level,
       list_style: node.list_style,
@@ -1428,17 +1368,19 @@ class TaskController < ApplicationController
   def create_smart_reviews(current_version, base_version, task_level_reviewer_id)
     created_reviews = []
     
-    # Group nodes by assigned reviewer
-    nodes_by_reviewer = current_version.action_nodes.group_by(&:reviewer_id)
+    # Group nodes by assigned reviewer (using all_action_nodes to include children)
+    nodes_by_reviewer = current_version.all_action_nodes.group_by(&:reviewer_id)
     
     Rails.logger.info "🔧 SMART REVIEW CREATION DEBUG:"
-    Rails.logger.info "🔧 Total nodes: #{current_version.action_nodes.count}"
+    Rails.logger.info "🔧 Total nodes: #{current_version.all_action_nodes.count}"
     Rails.logger.info "🔧 Nodes by reviewer: #{nodes_by_reviewer.transform_values(&:count)}"
     Rails.logger.info "🔧 Task level reviewer ID: #{task_level_reviewer_id}"
     
-    # Create task-level review for unassigned nodes + general oversight
-    unassigned_nodes = current_version.action_nodes.where(reviewer_id: nil)
-    Rails.logger.info "🔧 Unassigned nodes count: #{unassigned_nodes.count}"
+    # Create task-level review for unassigned nodes + nodes assigned to the task level reviewer
+    unassigned_nodes = current_version.all_action_nodes.select do |node|
+      node.reviewer_id.nil? || node.reviewer_id == task_level_reviewer_id.to_i
+    end
+    Rails.logger.info "🔧 Unassigned / Task-level nodes count: #{unassigned_nodes.count}"
     
     if unassigned_nodes.any? || task_level_reviewer_id.present?
       task_level_review = create_task_level_review(
@@ -1453,7 +1395,7 @@ class TaskController < ApplicationController
     
     # Create node-level reviews for explicitly assigned nodes
     nodes_by_reviewer.each do |reviewer_id, assigned_nodes|
-      next if reviewer_id.nil? # Skip unassigned nodes (handled above)
+      next if reviewer_id.nil? || reviewer_id == task_level_reviewer_id.to_i # Skip unassigned and task-level reviewer nodes
       
       Rails.logger.info "🔧 Processing reviewer #{reviewer_id} with #{assigned_nodes.count} nodes"
       
@@ -1491,7 +1433,7 @@ class TaskController < ApplicationController
       existing_review.update!(
         reviewer_id: reviewer_id,
         base_version: base_version,
-        assigned_node_ids: unassigned_nodes.pluck(:id).to_json
+        assigned_node_ids: unassigned_nodes.map(&:id).to_json
       )
       existing_review
     else
@@ -1503,7 +1445,7 @@ class TaskController < ApplicationController
         status: 'pending',
         reviewer_type: 'task_level',
         is_aggregate_review: true,
-        assigned_node_ids: unassigned_nodes.pluck(:id).to_json
+        assigned_node_ids: unassigned_nodes.map(&:id).to_json
       )
     end
   end
@@ -1521,7 +1463,7 @@ class TaskController < ApplicationController
       # Update existing node-level review
       existing_review.update!(
         base_version: base_version,
-        assigned_node_ids: assigned_nodes.pluck(:id).to_json
+        assigned_node_ids: assigned_nodes.map(&:id).to_json
       )
       existing_review
     else
@@ -1533,7 +1475,7 @@ class TaskController < ApplicationController
         status: 'pending',
         reviewer_type: 'node_level',
         is_aggregate_review: false,
-        assigned_node_ids: assigned_nodes.pluck(:id).to_json
+        assigned_node_ids: assigned_nodes.map(&:id).to_json
       )
     end
   end

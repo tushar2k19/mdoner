@@ -31,19 +31,19 @@ class NotificationController < ApplicationController
   private
 
   def get_redirect_info(notification)
-    # UNIFIED NOTIFICATION ROUTING: All notifications should redirect to ReviewInterface
-    # since every notification is related to a review
-    
-      if notification.review_id
-      # Primary case: notification has direct review_id
-        { type: 'review', id: notification.review_id }
-      else
-      # Fallback: find the latest review for this task
+    # Partial approval: multiple reviews per version — send editor to the hub, not the
+    # single review row that was just approved (which would feel "stuck" or empty).
+    if notification.partial_approval?
+      return { type: 'task_review_hub', task_id: notification.task_id }
+    end
+
+    if notification.review_id.present?
+      { type: 'review', id: notification.review_id }
+    else
       latest_review = notification.task.reviews.order(created_at: :desc).first
       if latest_review
         { type: 'review', id: latest_review.id }
       else
-        # Last resort: if no review exists, redirect to task (shouldn't happen in normal flow)
         { type: 'task', id: notification.task_id }
       end
     end

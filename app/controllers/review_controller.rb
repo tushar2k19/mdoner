@@ -1,7 +1,11 @@
 class ReviewController < ApplicationController
+  include ActionNodePersister
   include NodeTreeSerializer
   # before_action :authorize_access_request!
-  before_action :set_review, only: [:show, :update, :approve, :reject, :forward, :comments]
+  # Use except: (not only: [..., :remind_reviewer]) so Rails 7.1 does not require every symbol
+  # in :only to exist as an action. A missing remind_reviewer method would otherwise break
+  # all ReviewController actions including #show (raise_on_missing_callback_actions).
+  before_action :set_review, except: [:index, :diff, :reviewer_status_breakdown]
 
   def index
     # Get all reviews for current user (as reviewer or editor)
@@ -40,11 +44,19 @@ class ReviewController < ApplicationController
       diff_data = {
         added_nodes: all_nodes,
         removed_nodes: [],
-        modified_nodes: []
+        modified_nodes: [],
+        moved_nodes: []
       }
+      baseline_nodes = []
     else
       # Get diff data between base version and current version
       diff_data = @review.task_version.diff_with(@review.base_version)
+      
+      # Prepare baseline nodes using existing serializer
+      base_tree_nodes = @review.base_version.node_tree
+      base_tree_with_counters = calculate_display_counters(base_tree_nodes)
+      # Pass empty diff_data so they don't get diff coloring applied incorrectly
+      baseline_nodes = serialize_node_tree_with_diff(base_tree_with_counters, {})
     end
     
     # Get nodes with diff status applied
@@ -60,6 +72,7 @@ class ReviewController < ApplicationController
         review: serialize_review(@review),
         task: serialize_task(@review.task_version.task),
         nodes: serialize_node_tree_with_diff(tree_with_counters, diff_data),
+        baseline_nodes: baseline_nodes,
         diff: diff_data,
         comment_trails: comment_trail ? [serialize_comment_trail(comment_trail)] : [],
         current_user: {
@@ -163,7 +176,7 @@ class ReviewController < ApplicationController
         Notification.create!(
           recipient: task_version.editor,
           task: task_version.task,
-          review: @review,
+          review: nil,
           message: "Your task '#{task_version.task.description}' has been partially approved (#{pending_count} reviews pending)",
           notification_type: 'partial_approval'
         )
@@ -256,6 +269,54 @@ class ReviewController < ApplicationController
     }, status: :unprocessable_entity
   end
 
+  # Editor nudges a pending reviewer (same task version cycle only).
+  def remind_reviewer
+    task = @review.task_version.task
+
+    unless task.editor_id == current_user.id
+      render json: { success: false, error: 'Forbidden' }, status: :forbidden
+      return
+    end
+
+    unless @review.task_version_id == task.current_version_id
+      render json: { success: false, error: 'Review is not for the current task version' }, status: :unprocessable_entity
+      return
+    end
+
+    unless @review.pending?
+      render json: { success: false, error: 'Reminders are only sent for pending reviews' }, status: :unprocessable_entity
+      return
+    end
+
+    if @review.last_reminder_sent_at.present? && @review.last_reminder_sent_at > 10.minutes.ago
+      render json: {
+        success: false,
+        error: 'Please wait before sending another reminder',
+        retry_after_seconds: (600 - (Time.current - @review.last_reminder_sent_at)).to_i.clamp(0, 600)
+      }, status: :too_many_requests
+      return
+    end
+
+    @review.update!(last_reminder_sent_at: Time.current)
+
+    Notification.create!(
+      recipient: @review.reviewer,
+      task: task,
+      review: @review,
+      message: "Reminder: your review is still pending for '#{task.description}'",
+      notification_type: :review_reminder
+    )
+
+    render json: {
+      success: true,
+      data: {
+        last_reminder_sent_at: @review.last_reminder_sent_at
+      }
+    }
+  rescue ActiveRecord::RecordInvalid => e
+    render json: { success: false, error: e.message }, status: :unprocessable_entity
+  end
+
   def diff
     # Get detailed diff between any two versions
     base_version_id = params[:base_version_id]
@@ -342,7 +403,11 @@ class ReviewController < ApplicationController
           }
         ]
       },
-      :base_version,
+      {
+        base_version: {
+          all_action_nodes: [:reviewer, :parent]
+        }
+      },
       :reviewer,
       {
         comment_trail: :comments
@@ -450,6 +515,7 @@ class ReviewController < ApplicationController
   def serialize_node_with_diff(node, diff_status, display_counter, formatted_display)
     {
       id: node.id,
+      stable_node_id: node.stable_node_id,
       content: node.content,
       html_content: node.html_content,
       level: node.level,
@@ -466,7 +532,7 @@ class ReviewController < ApplicationController
       created_at: node.created_at,
       updated_at: node.updated_at,
       reviewer_id: node.reviewer_id,
-      reviewer_name: node.reviewer&.first_name # Include reviewer name if reviewer exists 
+      reviewer_name: node.reviewer&.full_name # full name for review/diff UI
     }
   end
 
@@ -481,9 +547,14 @@ class ReviewController < ApplicationController
       return 'deleted'
     end
     
-    # Check if node is in modified nodes (now just an array of nodes)
+    # Check if node is in modified nodes
     if diff_data[:modified_nodes]&.any? { |modified_node| modified_node.id == node.id }
       return 'modified'
+    end
+    
+    # Check if node is in moved nodes
+    if diff_data[:moved_nodes]&.any? { |moved_node| moved_node.id == node.id }
+      return 'moved'
     end
     
     # Default to unchanged
@@ -512,74 +583,7 @@ class ReviewController < ApplicationController
   end
 
   def update_task_version_nodes(task_version, nodes_data)
-    # Clear existing nodes
-    task_version.all_action_nodes.destroy_all
-    
-    # Create new nodes from the updated data
-    create_action_nodes_for_version(task_version, nodes_data)
-  end
-
-  def create_action_nodes_for_version(version, nodes_data)
-    # Handle both flat and hierarchical node structures
-    flat_nodes = flatten_node_structure(nodes_data)
-    
-    # Sort by level to ensure parents are created before children
-    sorted_nodes = flat_nodes.sort_by { |node| [node['level'] || 1, node['position'] || 0] }
-    
-    # Keep track of created nodes for parent-child relationships
-    node_id_mapping = {}
-    
-    sorted_nodes.each do |node_data|
-      # Skip nodes without content
-      next if node_data['content'].blank?
-      
-      # Find parent if specified
-      parent_node = nil
-      if node_data['parent_id'] && node_id_mapping[node_data['parent_id']]
-        parent_node = node_id_mapping[node_data['parent_id']]
-      end
-      
-      # Create the node
-      new_node = version.all_action_nodes.create!(
-        content: node_data['content'],
-        level: node_data['level'] || 1,
-        list_style: node_data['list_style'] || 'decimal',
-        node_type: node_data['node_type'] || 'rich_text',
-        position: node_data['position'] || 1,
-        review_date: node_data['review_date'],
-        completed: node_data['completed'] || false,
-        parent: parent_node,
-        reviewer_id: node_data['reviewer_id'] # Preserve reviewer_id when creating nodes
-      )
-      
-      # Store mapping for children
-      if node_data['id']
-        node_id_mapping[node_data['id']] = new_node
-      end
-    end
-  end
-
-  def flatten_node_structure(nodes_data)
-    # If nodes_data is already flat, return as is
-    return nodes_data unless nodes_data.first&.key?('children')
-    
-    # Otherwise, flatten the hierarchical structure
-    result = []
-    
-    def flatten_recursive(nodes, result)
-      nodes.each do |node|
-        # Add the node itself (without children)
-        node_copy = node.except('children')
-        result << node_copy
-        
-        # Recursively add children
-        if node['children'] && node['children'].any?
-          flatten_recursive(node['children'], result)
-        end
-      end
-    end
-    
-    flatten_recursive(nodes_data, result)
-    result
+    # Apply delta to update nodes instead of destroying and recreating
+    apply_action_nodes_delta(task_version, nodes_data)
   end
 end 
