@@ -7,7 +7,9 @@ class TaskVersion < ApplicationRecord
   has_many :action_nodes, -> { where(parent_id: nil) }, dependent: :destroy
   has_many :all_action_nodes, class_name: 'ActionNode', dependent: :destroy
   has_many :reviews, dependent: :destroy
-  has_many :review_date_extension_events, dependent: :destroy
+  has_many :review_date_extension_events
+
+  before_destroy :purge_review_date_extension_events_if_applicable
 
   enum status: {
     draft: 'draft',
@@ -254,6 +256,10 @@ class TaskVersion < ApplicationRecord
   end
 
   private
+
+  def purge_review_date_extension_events_if_applicable
+    self.class.delete_review_date_extension_events_where(task_version_id: id)
+  end
 
   def format_tree_nodes(tree_nodes)
     formatted_lines = []

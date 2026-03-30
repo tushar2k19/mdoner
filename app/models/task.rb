@@ -11,8 +11,8 @@ class Task < ApplicationRecord
   has_many :reviews, through: :versions
   has_many :task_tags, dependent: :destroy
   has_many :tags, through: :task_tags
-  has_many :review_date_extension_events, dependent: :destroy
-  
+  has_many :review_date_extension_events
+
   # Handle deletion properly
   # before_destroy :clear_current_version_and_versions
 
@@ -96,7 +96,10 @@ class Task < ApplicationRecord
         # Use update_column to bypass validations and callbacks
         self.update_column(:current_version_id, nil)
       end
-      
+
+      # Before versions are destroyed (FK to task_versions); skip if migration not applied.
+      self.class.delete_review_date_extension_events_where(task_id: id)
+
       # Delete all notifications first to prevent foreign key constraint violations
       # This includes both task notifications and review notifications
       all_notification_ids = []
