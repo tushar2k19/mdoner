@@ -174,13 +174,13 @@ class ActionNode < ApplicationRecord
       # Generate the HTML structure
       result_html = case list_style
                     when 'bullet'
-                      %(<div class="#{css_classes.join(' ')}"#{reviewer_data}>
+                      %(<div id="action-node-#{id}" data-node-id="#{id}" class="#{css_classes.join(' ')}"#{reviewer_data}>
                           <span class="node-marker">#{counter}</span>
                           <span class="node-content">#{content_html}#{review_date_html}</span>
                           #{reviewer_html}
                         </div>)
                     else
-                      %(<div class="#{css_classes.join(' ')}"#{reviewer_data}>
+                      %(<div id="action-node-#{id}" data-node-id="#{id}" class="#{css_classes.join(' ')}"#{reviewer_data}>
                           <span class="node-marker">#{counter}.</span>
                           <span class="node-content">#{content_html}#{review_date_html}</span>
                           #{reviewer_html}
