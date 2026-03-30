@@ -4,6 +4,7 @@
     "builder": "NIXPACKS"
   },
   "deploy": {
-    "startCommand": "./bin/rails server -b 0.0.0.0"
+    "releaseCommand": "./bin/rails db:migrate",
+    "startCommand": "sh -c \"./bin/rails db:prepare && ./bin/rails server -b 0.0.0.0\""
   }
 }
