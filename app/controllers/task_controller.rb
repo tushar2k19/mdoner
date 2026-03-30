@@ -5,7 +5,6 @@ class TaskController < ApplicationController
   # before_action :authorize_access_request!
   before_action :set_task, only: [
     :update,
-    :destroy,
     :send_for_review,
     :approve,
     :resolve_merge,
@@ -13,6 +12,7 @@ class TaskController < ApplicationController
     :apply_merge,
     :review_cycle,
   ]
+  before_action :set_task_for_destroy, only: [:destroy]
   def index
     date = params[:date] ? Date.parse(params[:date]) : Date.today
     
@@ -417,14 +417,14 @@ class TaskController < ApplicationController
     render json: { error: e.record.errors.full_messages }, status: :unprocessable_entity
   end
 
-  def destroy   #change soft delete
-    pp"task = #{@task}, @task.editor = #{@task.editor}, current_user = #{current_user}"
-    if  @task #current_user == @task.editor && @task.draft?
-      @task.destroy
-      render json: { success: true }
-    else
+  def destroy
+    unless current_user.id == @task.editor_id && @task.draft?
       render json: { error: 'Unauthorized to delete this task' }, status: :unauthorized
+      return
     end
+
+    @task.destroy
+    render json: { success: true }
   end
 
   def send_for_review
@@ -1048,6 +1048,27 @@ class TaskController < ApplicationController
 
   def set_task
     @task = Task.find(params[:id])
+  end
+
+  # Idempotent destroy: Paranoia hides soft-deleted rows from Task.find, so a repeat DELETE
+  # (double submit, stale UI) would otherwise raise RecordNotFound and surface as an error.
+  def set_task_for_destroy
+    scope = Task.with_deleted
+    record = scope.find_by(id: params[:id])
+    unless record
+      render json: { error: 'Task not found' }, status: :not_found
+      return
+    end
+    if record.deleted_at.present?
+      unless current_user.id == record.editor_id
+        render json: { error: 'Task not found' }, status: :not_found
+        return
+      end
+      render json: { success: true, already_deleted: true }
+      return
+    end
+
+    @task = record
   end
 
   def task_params
