@@ -3,14 +3,9 @@
 # One-off / periodic maintenance: shift stale action_node.review_date values into a forward window.
 # Uses IST (same as Task#update_review_date_from_nodes) for "today".
 # Does not create ReviewDateExtensionEvent rows — uses update_all / update_column only.
-#
-# Run: `bundle exec rake review_dates:refresh_past` or
-#      `bundle exec rails runner "BulkRefreshActionNodeReviewDates.run"`.
-# Running `rails runner app/services/bulk_refresh_action_node_review_dates.rb` only loads this file;
-# it does not call `.run`, so nothing is updated.
 class BulkRefreshActionNodeReviewDates
-  IST = ('Asia/Kolkata'.freeze) unless const_defined?(:IST, false)
-  WINDOW_DAYS = 30 unless const_defined?(:WINDOW_DAYS, false)
+  IST = 'Asia/Kolkata'
+  WINDOW_DAYS = 30
 
   def self.run(**kwargs)
     new(**kwargs).run

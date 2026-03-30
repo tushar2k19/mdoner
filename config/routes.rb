@@ -36,6 +36,11 @@ Rails.application.routes.draw do
     get 'tasks/completed' => 'task#completed_tasks'
   end
 
+  namespace :imports do
+    post 'dashboard_html/preview' => 'dashboard_html#preview'
+    post 'dashboard_html/approve' => 'dashboard_html#approve'
+  end
+
   controller :comment do
     post 'task/:task_id/comments' => 'comment#create'
     get 'task/:task_id/comments' => 'comment#index'
