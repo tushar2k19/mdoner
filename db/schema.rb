@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_03_28_230843) do
+ActiveRecord::Schema[7.1].define(version: 2026_03_30_120000) do
   create_table "action_nodes", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.bigint "task_version_id", null: false
     t.bigint "parent_id"
@@ -72,6 +72,29 @@ ActiveRecord::Schema[7.1].define(version: 2026_03_28_230843) do
     t.index ["recipient_id"], name: "index_notifications_on_recipient_id"
     t.index ["review_id"], name: "index_notifications_on_review_id"
     t.index ["task_id"], name: "index_notifications_on_task_id"
+  end
+
+  create_table "review_date_extension_events", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
+    t.bigint "task_id", null: false
+    t.bigint "task_version_id", null: false
+    t.bigint "action_node_id"
+    t.string "stable_node_id"
+    t.date "previous_review_date", null: false
+    t.date "new_review_date", null: false
+    t.string "reason", limit: 32, null: false
+    t.text "explanation"
+    t.bigint "recorded_by_id", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["action_node_id", "created_at"], name: "index_rdee_on_action_node_id_and_created_at"
+    t.index ["action_node_id"], name: "index_review_date_extension_events_on_action_node_id"
+    t.index ["reason"], name: "index_rdee_on_reason"
+    t.index ["recorded_by_id"], name: "index_review_date_extension_events_on_recorded_by_id"
+    t.index ["stable_node_id"], name: "index_rdee_on_stable_node_id"
+    t.index ["task_id", "created_at"], name: "index_rdee_on_task_id_and_created_at"
+    t.index ["task_id", "reason"], name: "index_rdee_on_task_id_and_reason"
+    t.index ["task_id"], name: "index_review_date_extension_events_on_task_id"
+    t.index ["task_version_id"], name: "index_review_date_extension_events_on_task_version_id"
   end
 
   create_table "reviews", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
@@ -171,6 +194,10 @@ ActiveRecord::Schema[7.1].define(version: 2026_03_28_230843) do
   add_foreign_key "notifications", "reviews"
   add_foreign_key "notifications", "tasks"
   add_foreign_key "notifications", "users", column: "recipient_id"
+  add_foreign_key "review_date_extension_events", "action_nodes", on_delete: :nullify
+  add_foreign_key "review_date_extension_events", "task_versions"
+  add_foreign_key "review_date_extension_events", "tasks"
+  add_foreign_key "review_date_extension_events", "users", column: "recorded_by_id"
   add_foreign_key "reviews", "task_versions"
   add_foreign_key "reviews", "task_versions", column: "base_version_id"
   add_foreign_key "reviews", "users", column: "reviewer_id"

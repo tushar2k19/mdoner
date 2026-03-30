@@ -11,6 +11,10 @@ class User < ApplicationRecord
   has_many :comments
   has_many :notifications, foreign_key: 'recipient_id'
   has_many :assigned_action_nodes, class_name: 'ActionNode', foreign_key: 'reviewer_id'
+  has_many :recorded_review_date_extension_events,
+           class_name: 'ReviewDateExtensionEvent',
+           foreign_key: 'recorded_by_id',
+           dependent: :restrict_with_exception
 
   validates :email, presence: true, uniqueness: true
   validates :first_name, presence: true

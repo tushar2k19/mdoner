@@ -7,6 +7,7 @@ class TaskVersion < ApplicationRecord
   has_many :action_nodes, -> { where(parent_id: nil) }, dependent: :destroy
   has_many :all_action_nodes, class_name: 'ActionNode', dependent: :destroy
   has_many :reviews, dependent: :destroy
+  has_many :review_date_extension_events, dependent: :destroy
 
   enum status: {
     draft: 'draft',

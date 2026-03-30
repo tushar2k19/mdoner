@@ -5,6 +5,7 @@ class ActionNode < ApplicationRecord
   belongs_to :reviewer, class_name: 'User', optional: true
   has_many :children, class_name: 'ActionNode', foreign_key: 'parent_id', dependent: :destroy
   has_many :comments, dependent: :nullify
+  has_many :review_date_extension_events, dependent: :nullify
 
   validates :node_type, presence: true,
             inclusion: { in: %w[paragraph point subpoint subsubpoint table rich_text]  #add others if necessary

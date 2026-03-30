@@ -11,6 +11,7 @@ class Task < ApplicationRecord
   has_many :reviews, through: :versions
   has_many :task_tags, dependent: :destroy
   has_many :tags, through: :task_tags
+  has_many :review_date_extension_events, dependent: :destroy
   
   # Handle deletion properly
   # before_destroy :clear_current_version_and_versions

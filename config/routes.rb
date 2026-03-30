@@ -90,6 +90,7 @@ Rails.application.routes.draw do
       put 'nodes/:id' => 'action_node#update'
       patch 'nodes/:id' => 'action_node#update'
       delete 'nodes/:id' => 'action_node#destroy'
+      get 'nodes/:id/review_date_extension_events' => 'action_node#review_date_extension_events'
       
       # Special node operations
       post 'nodes/add_point' => 'action_node#add_point'
