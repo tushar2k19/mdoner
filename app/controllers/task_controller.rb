@@ -167,6 +167,126 @@ class TaskController < ApplicationController
     render json: { tasks: serialize_tasks_with_versions(tasks) }
   end
 
+  # Aggregated review-delay analytics for dashboard charts.
+  # This endpoint returns only attributed delay events (rows where reason was recorded).
+  def review_delay_analytics
+    range = parse_review_delay_date_range
+    visible_tasks = analytics_visible_tasks_scope
+    visible_task_ids = visible_tasks.select(:id)
+
+    events = ReviewDateExtensionEvent.joins(:task)
+                                     .where(task_id: visible_task_ids)
+                                     .where(created_at: range[:from].beginning_of_day..range[:to].end_of_day)
+
+    total_events = events.count
+    total_delay_days = events.sum(Arel.sql('DATEDIFF(new_review_date, previous_review_date)')).to_i
+    distinct_tasks = events.distinct.count(:task_id)
+    distinct_nodes = events.where.not(stable_node_id: [nil, '']).distinct.count(:stable_node_id)
+
+    reasons_rows = events.group(:reason).count
+    reasons = reasons_rows.map do |reason, count|
+      {
+        reason: reason,
+        label: review_delay_reason_label(reason),
+        count: count,
+        percentage: total_events.positive? ? ((count.to_f / total_events) * 100.0).round(1) : 0.0
+      }
+    end.sort_by { |row| -row[:count] }
+
+    sector_rows = events.group('tasks.sector_division')
+                        .pluck(
+                          'tasks.sector_division',
+                          Arel.sql('COUNT(*)'),
+                          Arel.sql('COALESCE(SUM(DATEDIFF(new_review_date, previous_review_date)), 0)')
+                        )
+
+    sectors = sector_rows.map do |sector_name, event_count, delay_days|
+      {
+        sector: sector_name.presence || 'Unspecified',
+        event_count: event_count.to_i,
+        delay_days: delay_days.to_i
+      }
+    end.sort_by { |row| -row[:delay_days] }
+
+    trend_rows = events.group(Arel.sql("DATE_FORMAT(review_date_extension_events.created_at, '%Y-%m')"))
+                       .pluck(
+                         Arel.sql("DATE_FORMAT(review_date_extension_events.created_at, '%Y-%m')"),
+                         Arel.sql('COUNT(*)'),
+                         Arel.sql('COALESCE(SUM(DATEDIFF(new_review_date, previous_review_date)), 0)')
+                       )
+
+    trend = trend_rows.map do |period, event_count, delay_days|
+      {
+        period: period,
+        event_count: event_count.to_i,
+        delay_days: delay_days.to_i
+      }
+    end.sort_by { |row| row[:period].to_s }
+
+    per_node_delay_counts = events.where.not(stable_node_id: [nil, '']).group(:stable_node_id).count.values
+    repeat_delay_histogram = build_repeat_delay_histogram(per_node_delay_counts)
+
+    top_tasks_rows = events.group('tasks.id', 'tasks.description', 'tasks.sector_division')
+                           .pluck(
+                             'tasks.id',
+                             'tasks.description',
+                             'tasks.sector_division',
+                             Arel.sql('COUNT(*)'),
+                             Arel.sql('COALESCE(SUM(DATEDIFF(new_review_date, previous_review_date)), 0)')
+                           )
+                           .map do |task_id, description, sector, event_count, delay_days|
+      {
+        task_id: task_id.to_i,
+        description: description,
+        sector: sector.presence || 'Unspecified',
+        event_count: event_count.to_i,
+        delay_days: delay_days.to_i
+      }
+    end
+                           .sort_by { |row| [-row[:delay_days], -row[:event_count]] }
+                           .first(8)
+
+    completed_task_ids = visible_tasks.where.not(completed_at: nil).select(:id)
+    completed_delayed_events = events.where(task_id: completed_task_ids)
+    completed_with_attributed_delay_count = completed_delayed_events.distinct.count(:task_id)
+    completed_delay_event_count = completed_delayed_events.count
+    avg_delay_events_per_completed_delayed_task = if completed_with_attributed_delay_count.positive?
+                                                    (completed_delay_event_count.to_f / completed_with_attributed_delay_count).round(2)
+                                                  else
+                                                    0.0
+                                                  end
+
+    render json: {
+      success: true,
+      scope_note: 'Metrics include only review-date extensions where editors submitted a delay reason.',
+      range: {
+        from: range[:from].iso8601,
+        to: range[:to].iso8601
+      },
+      kpis: {
+        total_events: total_events,
+        total_delay_days: total_delay_days,
+        distinct_tasks: distinct_tasks,
+        distinct_nodes: distinct_nodes,
+        avg_delay_days_per_event: total_events.positive? ? (total_delay_days.to_f / total_events).round(2) : 0.0,
+        completed_with_attributed_delay_count: completed_with_attributed_delay_count,
+        avg_delay_events_per_completed_delayed_task: avg_delay_events_per_completed_delayed_task
+      },
+      charts: {
+        reasons: reasons,
+        sectors: sectors,
+        trend: trend,
+        repeat_delay_histogram: repeat_delay_histogram
+      },
+      tables: {
+        top_tasks_by_delay_days: top_tasks_rows
+      }
+    }
+  rescue StandardError => e
+    Rails.logger.error "[review_delay_analytics] #{e.class}: #{e.message}"
+    render json: { success: false, error: 'Failed to load review delay analytics' }, status: :internal_server_error
+  end
+
   def create
     ActiveRecord::Base.transaction do
       # Create the task
@@ -627,6 +747,74 @@ class TaskController < ApplicationController
   end
 
   private
+
+  def parse_review_delay_date_range
+    to = begin
+      Date.iso8601(params[:to].to_s)
+    rescue ArgumentError, TypeError
+      Date.current
+    end
+
+    from = begin
+      Date.iso8601(params[:from].to_s)
+    rescue ArgumentError, TypeError
+      to - 180.days
+    end
+
+    from, to = to, from if from > to
+    { from: from, to: to }
+  end
+
+  def analytics_visible_tasks_scope
+    case current_user.role
+    when 'editor'
+      Task.all
+    when 'reviewer'
+      task_ids = Review.joins(:task_version)
+                       .where(reviewer: current_user)
+                       .pluck('task_versions.task_id')
+                       .uniq
+      Task.where(id: task_ids)
+    else
+      Task.none
+    end
+  end
+
+  def review_delay_reason_label(reason)
+    case reason
+    when 'operational' then 'Operational'
+    when 'financial' then 'Financial'
+    when 'technical' then 'Technical'
+    when 'weather' then 'Weather'
+    when 'misc' then 'Misc'
+    when 'other' then 'Other'
+    else
+      reason.to_s.humanize
+    end
+  end
+
+  def build_repeat_delay_histogram(counts)
+    buckets = {
+      '1 delay' => 0,
+      '2 delays' => 0,
+      '3 delays' => 0,
+      '4+ delays' => 0
+    }
+
+    counts.each do |count|
+      if count <= 1
+        buckets['1 delay'] += 1
+      elsif count == 2
+        buckets['2 delays'] += 1
+      elsif count == 3
+        buckets['3 delays'] += 1
+      else
+        buckets['4+ delays'] += 1
+      end
+    end
+
+    buckets.map { |bucket, value| { bucket: bucket, count: value } }
+  end
 
   # Re-fetch task with full eager loading for single-task serialization (avoids N+1 on Save response)
   def task_for_serialization(task)

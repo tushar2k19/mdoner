@@ -19,6 +19,7 @@ Rails.application.routes.draw do
 
   controller :task do
     get 'tasks' => 'task#index'
+    get 'tasks/review_delay_analytics' => 'task#review_delay_analytics'
     post 'task' => 'task#create'
     put 'task/:id' => 'task#update'
     patch 'task/:id' => 'task#update'
