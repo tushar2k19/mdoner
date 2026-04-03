@@ -69,4 +69,7 @@ Thumbs.db
 # Railway CLI link (local project/service link – do not commit)
 .railway/
 
+# SimpleCov (COVERAGE=true)
+/coverage/
+
 # /config/database.yml

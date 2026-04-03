@@ -1,4 +1,14 @@
 ENV["RAILS_ENV"] ||= "test"
+
+if ENV["COVERAGE"] == "true"
+  require "simplecov"
+  SimpleCov.start "rails" do
+    add_filter "/test/"
+    add_filter "/config/"
+    add_filter "/vendor/"
+  end
+end
+
 require_relative "../config/environment"
 require "rails/test_help"
 require "securerandom"
