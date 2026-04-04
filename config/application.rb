@@ -28,5 +28,10 @@ module ChhatisgarhBackend
     # Middleware like session, flash, cookies can be added back manually.
     # Skip views, helpers and assets when generating a new resource.
     config.api_only = true
+
+    # Meeting-centric dashboard (parallel `new_*` tables). See FEATURE_MEETING_DASHBOARD in backend/.env.example
+    config.x.meeting_dashboard_enabled = ActiveModel::Type::Boolean.new.cast(
+      ENV.fetch("FEATURE_MEETING_DASHBOARD", "false")
+    )
   end
 end

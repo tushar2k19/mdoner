@@ -68,4 +68,9 @@ Rails.application.configure do
 
   # Raise error when a before_action's only/except options reference missing actions
   config.action_controller.raise_on_missing_callback_actions = true
+
+  # Meeting-centric APIs: default ON in development for QA (set FEATURE_MEETING_DASHBOARD=false to disable).
+  config.x.meeting_dashboard_enabled = ActiveModel::Type::Boolean.new.cast(
+    ENV.fetch("FEATURE_MEETING_DASHBOARD", "true")
+  )
 end

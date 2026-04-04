@@ -1,0 +1,168 @@
+--- /dev/fd/63	2026-04-04 00:07:44.864400183 +0530
++++ /dev/fd/62	2026-04-04 00:07:44.865400186 +0530
+@@ -1445,6 +1445,165 @@
+   line-height: 1.1 !important;
+ }
+ 
++.meeting-dashboard-bar {
++  margin: 0 1rem 0.75rem;
++  padding: 0.75rem 1rem;
++  font-size: 0.88rem;
++  color: #0f172a;
++  background: #eff6ff;
++  border: 1px solid #bfdbfe;
++  border-radius: 10px;
++  display: flex;
++  flex-direction: column;
++  gap: 0.65rem;
++}
++.meeting-bar-row {
++  display: flex;
++  flex-wrap: wrap;
++  align-items: center;
++  gap: 0.75rem 1rem;
++}
++.meeting-bar-row-main {
++  justify-content: space-between;
++}
++.meeting-bar-field {
++  display: inline-flex;
++  flex-direction: column;
++  gap: 0.2rem;
++  font-size: 0.8rem;
++  color: #334155;
++}
++.meeting-bar-label {
++  font-weight: 600;
++  color: #0f172a;
++}
++.meeting-bar-sublabel {
++  font-size: 0.75rem;
++  color: #64748b;
++}
++.meeting-date-input {
++  padding: 0.35rem 0.5rem;
++  border: 1px solid #cbd5e1;
++  border-radius: 6px;
++  font-size: 0.85rem;
++}
++.meeting-bar-hint {
++  flex: 1 1 200px;
++  color: #475569;
++  font-size: 0.82rem;
++}
++.meeting-bar-hint code {
++  font-size: 0.78rem;
++}
++.meeting-import-link {
++  margin-left: 0.35rem;
++  font-weight: 600;
++  color: #1d4ed8;
++}
++.meeting-bar-clear-btn {
++  padding: 0.35rem 0.65rem;
++  border-radius: 6px;
++  border: 1px solid #cbd5e1;
++  background: #fff;
++  cursor: pointer;
++  font-size: 0.8rem;
++}
++.meeting-bar-actions {
++  border-top: 1px dashed #bfdbfe;
++  padding-top: 0.5rem;
++}
++.publish-dashboard-btn {
++  padding: 0.45rem 1rem;
++  border: none;
++  border-radius: 8px;
++  background: #1d4ed8;
++  color: #fff;
++  font-weight: 600;
++  cursor: pointer;
++  font-size: 0.85rem;
++}
++.publish-dashboard-btn:disabled {
++  opacity: 0.6;
++  cursor: not-allowed;
++}
++.reset-draft-btn {
++  padding: 0.45rem 1rem;
++  border-radius: 8px;
++  border: 1px solid #cbd5e1;
++  background: #fff;
++  font-weight: 600;
++  cursor: pointer;
++  font-size: 0.85rem;
++}
++.reset-draft-btn:disabled {
++  opacity: 0.6;
++  cursor: not-allowed;
++}
++.table-row.agenda-range-row-highlight {
++  outline: 2px solid #fbbf24;
++  outline-offset: 1px;
++  border-radius: 4px;
++}
++.action-content-cell /deep/ .action-node.agenda-range-node-highlight {
++  box-shadow: 0 0 0 2px #fbbf24;
++  border-radius: 6px;
++}
++.meeting-reset-modal-overlay {
++  position: fixed;
++  inset: 0;
++  background: rgba(15, 23, 42, 0.45);
++  z-index: 100000;
++  display: flex;
++  align-items: center;
++  justify-content: center;
++  padding: 1rem;
++}
++.meeting-reset-modal {
++  background: #fff;
++  border-radius: 12px;
++  padding: 1.25rem 1.5rem;
++  max-width: 420px;
++  width: 100%;
++  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.2);
++}
++.meeting-reset-modal-title {
++  margin: 0 0 0.5rem;
++  font-size: 1.1rem;
++}
++.meeting-reset-modal-text {
++  margin: 0 0 1rem;
++  color: #475569;
++  font-size: 0.9rem;
++}
++.meeting-reset-modal-actions {
++  display: flex;
++  justify-content: flex-end;
++  gap: 0.5rem;
++}
++.meeting-reset-cancel,
++.meeting-reset-confirm {
++  padding: 0.4rem 0.9rem;
++  border-radius: 8px;
++  font-weight: 600;
++  cursor: pointer;
++  border: 1px solid #cbd5e1;
++  background: #fff;
++}
++.meeting-reset-confirm {
++  background: #b45309;
++  border-color: #b45309;
++  color: #fff;
++}
++.meeting-reset-confirm:disabled {
++  opacity: 0.6;
++  cursor: not-allowed;
++}
++.menu-item-disabled {
++  color: #94a3b8;
++  cursor: default;
++  pointer-events: none;
++}
++
+ .search-actions-row {
+   display: flex;
+   align-items: stretch;

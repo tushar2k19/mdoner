@@ -41,6 +41,33 @@ Rails.application.routes.draw do
     post 'dashboard_html/approve' => 'dashboard_html#approve'
   end
 
+  namespace :meeting_dashboard do
+    resources :tasks, only: [:create, :update, :destroy] do
+      member do
+        get :nodes
+      end
+    end
+    put "tasks/:task_id/nodes/:id", to: "task_nodes#update"
+    get "tasks/:task_id/nodes/:id/review_date_extension_events", to: "task_nodes#review_date_extension_events"
+  end
+
+  scope path: 'meeting_dashboard', controller: 'meeting_dashboard' do
+    get 'draft', action: :draft
+    get 'meeting_dates', action: :meeting_dates
+    get 'published', action: :published
+    get 'draft_settings', action: :draft_settings
+    patch 'draft_settings', action: :update_draft_settings
+    post 'publish', action: :publish
+    post 'reset_draft', action: :reset_draft
+    get 'draft_editor_overlay', action: :draft_editor_overlay
+    get 'comment_nodes', action: :comment_nodes
+    get 'dashboard_node_comments', action: :dashboard_node_comments
+    post 'dashboard_node_comments', action: :create_dashboard_node_comment
+    post 'assignments', action: :create_assignment
+    delete 'assignments/:id', action: :destroy_assignment
+    post 'reschedule', action: :reschedule
+  end
+
   controller :comment do
     post 'task/:task_id/comments' => 'comment#create'
     get 'task/:task_id/comments' => 'comment#index'

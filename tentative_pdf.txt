@@ -1,0 +1,461 @@
+async downloadPDF() {
+      try {
+        const orientation = 'l';
+        const pdf = new jsPDF(orientation, 'mm', 'a4');
+        const pageWidth = pdf.internal.pageSize.getWidth();
+        const pageHeight = pdf.internal.pageSize.getHeight();
+        const marginX = 5;
+        const marginY = 10;
+        const usableWidth = pageWidth - marginX * 2;
+        let position = marginY;
+
+        pdf.setFontSize(12);
+        pdf.setFont('Arial', 'bold');
+
+        const headerText = 'DASHBOARD MEETING POINTS (MDoNER)';
+        const headerWidth = pdf.getTextWidth(headerText);
+        pdf.setFillColor(255, 255, 0);
+        pdf.rect(104, 6, headerWidth + 1.25, 6, 'F');
+        pdf.text(headerText, pageWidth / 2, marginY, { align: 'center' });
+
+        // Date header
+        const today = new Date();
+        const options = { timeZone: 'Asia/Kolkata' };
+        const formattedDate = today.toLocaleDateString('en-IN', options)
+          .replace(/\//g, '.')
+          .replace(/\b(\d)\b/g, '0$1');
+        pdf.setFillColor(255, 255, 0);
+        pdf.rect(pageWidth - marginX - 30.2, marginY - 4.5, 30.2, 6, 'F');
+        pdf.text(`As on ${formattedDate}`, pageWidth - marginX, marginY, { align: 'right' });
+
+        position += 1;
+
+        // --- Custom Table Headers ---
+        // Use precise manual placement for each header
+        const columnWidths = [4, 9, 9, 135, 8, 9, 8]; // in mm
+        const headers = [
+          'S No.',
+          'Sector/Division',
+          'Description',
+          'Action to be Taken',
+          'Original Date',
+          'Responsibility',
+          'Review Date'
+        ];
+        const sumWidths = columnWidths.reduce((a, b) => a + b, 0);
+        const scalingFactor = usableWidth / sumWidths;
+        const scaledColumnWidths = columnWidths.map(w => w * scalingFactor);
+        const headerOffsets = [0, 7.5, 17.5, -5, -27.5, -16.5, -7.5]; // mm, tweak as needed
+        // Single implementation for blue table header — must match on page 1 and continuation pages
+        const drawBlueTableHeaderRow = (yMm) => {
+          let xPos = marginX;
+          pdf.setFontSize(7.5);
+          pdf.setFont('Arial', 'bold');
+          for (let hi = 0; hi < headers.length; hi++) {
+            const cellWidth = scaledColumnWidths[hi];
+            pdf.setFillColor(59, 130, 246);
+            pdf.rect(xPos, yMm, cellWidth, 8, 'F');
+            xPos += cellWidth;
+          }
+          xPos = marginX;
+          for (let hi = 0; hi < headers.length; hi++) {
+            const cellWidth = scaledColumnWidths[hi];
+            const textX = xPos + cellWidth / 2 + (headerOffsets[hi] || 0);
+            pdf.setTextColor(0, 0, 0);
+            pdf.text(headers[hi], textX + 3, yMm + 5.5, { align: 'center' });
+            xPos += cellWidth;
+          }
+          return yMm + 8;
+        };
+
+        let xPosition = marginX;
+        position = drawBlueTableHeaderRow(position);
+
+        // --- Process Rows ---
+        const rows = document.querySelectorAll('.table-row');
+        if (!rows.length) return;
+
+        for (let i = 0; i < rows.length; i++) {
+          const rowClone = rows[i].cloneNode(true);
+          // Remove Status and Actions columns (8, 9) ONLY from the main row, not nested tables
+          const tableInRow = rowClone.querySelector('table');
+          const mainRow = tableInRow && tableInRow.rows[0];
+          if (mainRow && mainRow.children.length >= 9) {
+            // Remove 9th and 8th td (Status and Actions) from the main row only
+            mainRow.removeChild(mainRow.children[8]); // 9th column (Actions)
+            mainRow.removeChild(mainRow.children[7]); // 8th column (Status)
+          }
+
+          // Set fixed widths and enforce wrapping for all cells
+          const tds = tableInRow.querySelectorAll('tr > td:not(table table td)');
+          tds.forEach((td, index) => {
+            td.style.width = `${scaledColumnWidths[index]}mm`;
+            td.style.maxWidth = `${scaledColumnWidths[index]}mm`;
+            td.style.minWidth = `${scaledColumnWidths[index]}mm`;
+            td.style.boxSizing = 'border-box';
+            td.style.wordBreak = 'break-word';
+            td.style.overflowWrap = 'break-word';
+            td.style.whiteSpace = 'pre-line';
+            td.style.verticalAlign = 'middle';
+            // Set vertical alignment based on column type
+            // if (index === 3 || index === 4 || index === 5) { // Original Date, Responsibility, Review Date columns
+              
+            // } else {
+            //   td.style.verticalAlign = 'top';
+            // }
+            td.style.fontSize = '10px';
+            td.style.lineHeight = '1.3';
+            td.style.padding = '2px 4px';
+          });
+
+          // Action column (index 3)
+          const actionColumn = tableInRow.querySelector('td:nth-child(4)');
+          if (actionColumn) {
+            actionColumn.style.width = `${scaledColumnWidths[3]}mm`;
+            actionColumn.style.maxWidth = `${scaledColumnWidths[3]}mm`;
+            actionColumn.style.minWidth = `${scaledColumnWidths[3]}mm`;
+            actionColumn.style.wordBreak = 'break-word';
+            actionColumn.style.overflowWrap = 'break-word';
+            actionColumn.style.whiteSpace = 'pre-line';
+            actionColumn.style.fontSize = '10px';
+            actionColumn.style.lineHeight = '1.3';
+            actionColumn.style.verticalAlign = 'top';
+            // Also apply to all nested elements
+            const inlineTags = ['SPAN', 'B', 'STRONG', 'I', 'EM', 'U', 'FONT', 'A', 'SUB', 'SUP'];
+            actionColumn.querySelectorAll('*').forEach(el => {
+              el.style.wordBreak = 'break-word';
+              el.style.overflowWrap = 'break-word';
+              
+              if (!inlineTags.includes(el.tagName.toUpperCase())) {
+                el.style.whiteSpace = 'pre-line';
+                el.style.maxWidth = '100%';
+              }
+              
+              el.style.fontSize = '10px';
+              el.style.lineHeight = '1.3';
+            });
+          }
+
+          // Add .pdf-capture-mode for PDF-specific styles
+          rowClone.classList.add('pdf-capture-mode');
+          tableInRow.style.tableLayout = 'fixed';
+          tableInRow.style.width = `${usableWidth}mm`;
+          tableInRow.style.maxWidth = `${usableWidth}mm`;
+          tableInRow.style.borderCollapse = 'collapse';
+
+          // Temporary container
+          const tempDiv = document.createElement('div');
+          tempDiv.style.position = 'absolute';
+          tempDiv.style.left = '-9999px';
+          tempDiv.style.background = '#fff';
+          tempDiv.style.width = `${usableWidth}mm`;
+          rowClone.style.width = `${usableWidth}mm`;
+          tempDiv.appendChild(rowClone);
+          document.body.appendChild(tempDiv);
+
+          // Wait for clone layout, then re-position reviewer badges so they appear correctly in PDF
+          await new Promise(resolve => {
+            requestAnimationFrame(() => requestAnimationFrame(resolve));
+          });
+          this.positionReviewerBadgesForClone(rowClone);
+          await new Promise(resolve => {
+            requestAnimationFrame(() => requestAnimationFrame(resolve));
+          });
+
+          // PRE-COMPUTE SAFE CUT BOUNDARIES
+          const cloneRect = rowClone.getBoundingClientRect();
+          const avoidCutIntervals = [];
+          const textFragments = []; // For searchable PDF layer
+
+          const collectTextFragments = () => {
+            const walker = document.createTreeWalker(rowClone, NodeFilter.SHOW_TEXT, null, false);
+            let node;
+            while ((node = walker.nextNode())) {
+              let text = node.nodeValue.trim();
+              if (text.length === 0) continue;
+              
+              const parent = node.parentElement;
+              if (!parent) continue;
+              const style = window.getComputedStyle(parent);
+              if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') continue;
+              if (['SCRIPT', 'STYLE', 'NOSCRIPT'].includes(parent.tagName)) continue;
+
+              const range = document.createRange();
+              range.selectNodeContents(node);
+              let rects = Array.from(range.getClientRects());
+
+              if (rects.length === 0) {
+                const pRect = parent.getBoundingClientRect();
+                if (pRect.height > 0 && pRect.width > 0) {
+                  rects = [pRect];
+                }
+              }
+              
+              if (rects.length === 0) continue;
+
+              // Clean text for jsPDF to avoid font/encoding errors (replace smart quotes and dashes)
+              text = text.replace(/[\u2018\u2019]/g, "'").replace(/[\u201C\u201D]/g, '"').replace(/[\u2013\u2014]/g, '-');
+              text = text.replace(/[^\x20-\x7E\xA0-\xFF]/g, ' ');
+
+              if (rects.length === 1) {
+                const rect = rects[0];
+                if (rect.height > 0) {
+                  textFragments.push({
+                    text: text,
+                    top: rect.top - cloneRect.top,
+                    bottom: rect.bottom - cloneRect.top,
+                    left: rect.left - cloneRect.left,
+                    width: rect.width,
+                    height: rect.height
+                  });
+                }
+              } else {
+                const lines = text.split(/\s*\n\s*/).filter(l => l.trim().length > 0);
+                if (lines.length === rects.length) {
+                  for (let j = 0; j < rects.length; j++) {
+                    const rect = rects[j];
+                    if (rect.height > 0) {
+                      textFragments.push({
+                        text: lines[j].trim(),
+                        top: rect.top - cloneRect.top,
+                        bottom: rect.bottom - cloneRect.top,
+                        left: rect.left - cloneRect.left,
+                        width: rect.width,
+                        height: rect.height
+                      });
+                    }
+                  }
+                } else {
+                  const charsPerRect = Math.ceil(text.length / rects.length);
+                  for (let j = 0; j < rects.length; j++) {
+                    const rect = rects[j];
+                    if (rect.height > 0) {
+                      const chunk = text.substring(j * charsPerRect, (j + 1) * charsPerRect).trim();
+                      if (chunk) {
+                        textFragments.push({
+                          text: chunk,
+                          top: rect.top - cloneRect.top,
+                          bottom: rect.bottom - cloneRect.top,
+                          left: rect.left - cloneRect.left,
+                          width: rect.width,
+                          height: rect.height
+                        });
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          };
+          collectTextFragments();
+
+          // FIX HTML2CANVAS INLINE BACKGROUND OVERLAP BUG
+          // html2canvas draws massive overflowing rects for inline elements that span multiple lines.
+          // We convert their backgrounds into precise absolute block divs.
+          const bgDivs = [];
+          const cloneStyle = window.getComputedStyle(rowClone);
+          const borderTop = parseFloat(cloneStyle.borderTopWidth) || 0;
+          const borderLeft = parseFloat(cloneStyle.borderLeftWidth) || 0;
+
+          const allEls = rowClone.querySelectorAll('td:nth-child(4) *');
+          allEls.forEach(el => {
+            const style = window.getComputedStyle(el);
+            const bgColor = style.backgroundColor;
+            
+            if (style.display === 'inline' && bgColor && bgColor !== 'rgba(0, 0, 0, 0)' && bgColor !== 'transparent') {
+              const range = document.createRange();
+              range.selectNodeContents(el);
+              const rects = Array.from(range.getClientRects());
+              
+              rects.forEach(rect => {
+                if (rect.height > 0 && rect.width > 0) {
+                  const bgDiv = document.createElement('div');
+                  bgDiv.style.position = 'absolute';
+                  // Calculate position relative to the padding box of rowClone
+                  bgDiv.style.left = `${rect.left - cloneRect.left - borderLeft}px`;
+                  bgDiv.style.top = `${rect.top - cloneRect.top - borderTop}px`;
+                  bgDiv.style.width = `${rect.width}px`;
+                  bgDiv.style.height = `${rect.height}px`;
+                  bgDiv.style.backgroundColor = bgColor;
+                  bgDiv.style.zIndex = '0';
+                  bgDiv.style.pointerEvents = 'none';
+                  bgDivs.push(bgDiv);
+                }
+              });
+              
+              // Remove buggy background and ensure text renders on top
+              el.style.setProperty('background-color', 'transparent', 'important');
+              el.style.position = 'relative';
+              el.style.zIndex = '1';
+            }
+          });
+
+          rowClone.style.position = 'relative';
+          rowClone.style.zIndex = '0'; // Establish stacking context
+          bgDivs.forEach(div => rowClone.appendChild(div));
+
+          const addRects = (elements) => {
+            elements.forEach(el => {
+              const rect = el.getBoundingClientRect();
+              if (rect.height > 0) {
+                avoidCutIntervals.push({
+                  top: rect.top - cloneRect.top,
+                  bottom: rect.bottom - cloneRect.top
+                });
+              }
+            });
+          };
+
+          // Protect nested table rows, images, and reviewer badges
+          addRects(rowClone.querySelectorAll('td:nth-child(4) table tr'));
+          addRects(rowClone.querySelectorAll('td:nth-child(4) img'));
+          addRects(rowClone.querySelectorAll('.reviewer-badge-parallel'));
+
+          // Protect individual text lines in the Action column
+          const actionTd = rowClone.querySelector('td:nth-child(4)');
+          if (actionTd) {
+            const walker = document.createTreeWalker(actionTd, NodeFilter.SHOW_TEXT, null, false);
+            let node;
+            while ((node = walker.nextNode())) {
+              if (node.nodeValue.trim().length > 0) {
+                const range = document.createRange();
+                range.selectNodeContents(node);
+                const rects = range.getClientRects();
+                for (let j = 0; j < rects.length; j++) {
+                  if (rects[j].height > 0) {
+                    avoidCutIntervals.push({
+                      top: rects[j].top - cloneRect.top,
+                      bottom: rects[j].bottom - cloneRect.top
+                    });
+                  }
+                }
+              }
+            }
+          }
+
+          // Sort top-to-bottom for the retraction algorithm
+          avoidCutIntervals.sort((a, b) => a.top - b.top);
+
+          try {
+            const canvas = await html2canvas(rowClone, {
+              scale: 2,
+              useCORS: true,
+              backgroundColor: null,
+              width: usableWidth * 3.78, // px per mm
+              logging: true,
+              allowTaint: true,
+              letterRendering: true,
+              fontFamilyCSS: '*',
+              onclone: (clonedDoc) => {
+                clonedDoc.body.style.overflow = 'visible';
+                clonedDoc.body.style.position = 'static';
+              }
+            });
+
+            // Page management with layout-aware snapping
+            let renderedHeight = 0;
+            const scaleY = canvas.height / cloneRect.height;
+            const maxAllowedGap = (((pageHeight - 10) * canvas.width) / usableWidth) * 0.3;
+
+            while (renderedHeight < canvas.height) {
+              let sliceHeightPx = Math.min(
+                ((pageHeight - position - 10) * canvas.width) / usableWidth,
+                canvas.height - renderedHeight
+              );
+
+              let targetCutY = renderedHeight + sliceHeightPx;
+
+              if (targetCutY < canvas.height) {
+                let bestCutY = targetCutY;
+                for (let k = 0; k < avoidCutIntervals.length; k++) {
+                  const interval = avoidCutIntervals[k];
+                  const topCanvas = interval.top * scaleY;
+                  const bottomCanvas = interval.bottom * scaleY;
+
+                  if (targetCutY > topCanvas + 1 && targetCutY < bottomCanvas - 1) {
+                    const gapCreated = targetCutY - topCanvas;
+                    if (gapCreated <= maxAllowedGap && topCanvas > renderedHeight + 2) {
+                      bestCutY = topCanvas;
+                      break; 
+                    }
+                  }
+                }
+                
+                if (bestCutY !== targetCutY) {
+                  targetCutY = bestCutY;
+                  sliceHeightPx = targetCutY - renderedHeight;
+                }
+              }
+
+              const sliceCanvas = document.createElement('canvas');
+              sliceCanvas.width = canvas.width;
+              sliceCanvas.height = sliceHeightPx;
+              const sliceCtx = sliceCanvas.getContext('2d');
+              sliceCtx.drawImage(canvas, 0, renderedHeight, canvas.width, sliceHeightPx, 0, 0, canvas.width, sliceHeightPx);
+
+              const sliceImgData = sliceCanvas.toDataURL('image/jpeg', 1.0);
+              const sliceImgHeight = (sliceHeightPx * usableWidth) / canvas.width;
+
+              pdf.addImage(sliceImgData, 'JPEG', marginX, position, usableWidth + 1, sliceImgHeight);
+
+              // INVISIBLE TEXT LAYER FOR SEARCH
+              const scaleX = canvas.width / cloneRect.width;
+              textFragments.forEach(frag => {
+                const fragTopCanvas = frag.top * scaleY;
+                const fragBottomCanvas = frag.bottom * scaleY;
+                // Check if fragment intersects this slice (with 1px epsilon)
+                if (fragBottomCanvas > renderedHeight + 1 && fragTopCanvas < renderedHeight + sliceHeightPx - 1) {
+                  // Calculate coordinates in mm (match addImage horizontal mapping)
+                  const xMm = marginX + (frag.left * scaleX / canvas.width) * (usableWidth + 1);
+                  const widthMm = Math.max(
+                    0.5,
+                    (frag.width * scaleX / canvas.width) * (usableWidth + 1)
+                  );
+                  // Line box height in canvas px -> pt (82/96 ~= CSS px to pt); scaled so
+                  // Ctrl+F selection boxes stay tighter than the old 0.75* heuristic (still searchable).
+                  const lineBoxCanvasPx = frag.height * scaleY;
+                  let fontSizePt = lineBoxCanvasPx * (82 / 96) * 0.92 * 1.1; // +10% vs prior invisible layer
+                  fontSizePt = Math.max(2.5, Math.min(7.15, fontSizePt));
+
+                  pdf.setFont('helvetica', 'normal');
+                  pdf.setFontSize(fontSizePt);
+                  const yMm = position + ((fragTopCanvas - renderedHeight) / sliceHeightPx) * sliceImgHeight;
+                  // maxWidth wraps invisible text inside the same column as the screenshot (no horizontal spill)
+                  pdf.text(String(frag.text), xMm, yMm, {
+                    renderingMode: 3,
+                    baseline: 'top',
+                    maxWidth: widthMm
+                  });
+                }
+              });
+
+              renderedHeight += sliceHeightPx;
+              position += sliceImgHeight;
+
+              if (renderedHeight < canvas.height) {
+                pdf.addPage(orientation, 'a4');
+                position = marginY;
+                xPosition = marginX;
+                pdf.setFontSize(12);
+                pdf.setFont('Arial', 'bold');
+                // Main title
+                const headerText = 'DASHBOARD MEETING POINTS (MDoNER)';
+                const headerWidth = pdf.getTextWidth(headerText);
+                pdf.setFillColor(255, 255, 0);
+                pdf.rect(104, 6, headerWidth + 1.25, 6, 'F');
+                pdf.text(headerText, pageWidth / 2, marginY, { align: 'center' });
+                // Date header
+                const today = new Date();
+                const options = { timeZone: 'Asia/Kolkata' };
+                const formattedDate = today.toLocaleDateString('en-IN', options)
+                  .replace(/\//g, '.')
+                  .replace(/\b(\d)\b/g, '0$1');
+                pdf.setFillColor(255, 255, 0);
+                pdf.rect(pageWidth - marginX - 30.2, marginY - 4.5, 30.2, 6, 'F');
+                pdf.text(`As on ${formattedDate}`, pageWidth - marginX, marginY, { align: 'right' });
+                position += 1;
+                position = drawBlueTableHeaderRow(position);
+              }
+            }
+            document.body.removeChild(tempDiv);
+          

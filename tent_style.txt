@@ -1,0 +1,1902 @@
+<style scoped>
+/* Main container */
+.dashboard-container {
+  padding: 1.5rem;
+  min-height: calc(100vh - 4rem);
+}
+
+ /* Top action buttons container - Removed card styling */
+.dashboard-actions {
+  display: flex;
+  justify-content: flex-end;
+   align-items: center;
+   gap: 0.75rem;
+  margin-bottom: 1.5rem;
+   /* Removed card styling - no background, padding, shadow, border */
+}
+
+ /* Create task button - compact styling like FinalDashboard */
+.create-task-btn {
+   padding: 1rem 1rem;
+   background: linear-gradient(135deg, #059669 0%, #10b981 100%);
+  color: white;
+  border: none;
+   border-radius: 6px;
+   cursor: pointer;
+   font-weight: 600;
+   font-size: 0.85rem;
+   transition: all 0.2s ease;
+   box-shadow: 0 2px 4px rgba(5, 150, 105, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.create-task-btn:hover {
+   background: linear-gradient(135deg, #047857 0%, #059669 100%);
+   transform: translateY(-1px);
+   box-shadow: 0 4px 8px rgba(5, 150, 105, 0.3);
+}
+
+.create-task-btn::before {
+  content: "+";
+  font-weight: bold;
+  margin-right: 0.5rem;
+}
+
+
+ /* Filter button - compact styling like FinalDashboard */
+.filter-btn {
+  display: flex;
+  align-items: center;
+   gap: 6px;
+   padding: 1rem 1.5rem;
+   background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%);
+   color: white;
+   border: none;
+   border-radius: 6px;
+   cursor: pointer;
+   font-weight: 600;
+   font-size: 0.85rem;
+   transition: all 0.2s ease;
+   box-shadow: 0 2px 4px rgba(30, 58, 138, 0.2);
+}
+.pdf-capture-mode {
+  font-family: Arial !important;
+  overflow: visible !important;
+}
+
+.pdf-capture-mode tr > td:not(table table td):nth-child(1),  /* S No. */
+.pdf-capture-mode tr > td:not(table table td):nth-child(2),  /* Sector/Division */
+.pdf-capture-mode tr > td:not(table table td):nth-child(3),  /* Description */
+.pdf-capture-mode tr > td:not(table table td):nth-child(5),  /* Original Date */
+.pdf-capture-mode tr > td:not(table table td):nth-child(6),  /* Responsibility */
+.pdf-capture-mode tr > td:not(table table td):nth-child(7) { /* Review Date */
+  font-size: 12px !important;
+  line-height: 1.2 !important;
+}
+
+/* the following code makes the content uniform (12px) for 4th col. remove them to preserve the styling of "action to be taken" */
+
+.pdf-capture-mode td {
+  font-size: 12pt !important;
+  padding: 2px 5px !important;
+}
+
+
+.filter-btn:hover {
+   background: linear-gradient(135deg, #1e40af 0%, #2563eb 100%);
+   transform: translateY(-1px);
+   box-shadow: 0 4px 8px rgba(30, 58, 138, 0.3);
+}
+
+/* ========================================
+   WORLD-CLASS FILTER SYSTEM STYLES
+   ======================================== */
+
+.filter-container {
+  position: relative;
+  display: inline-block;
+}
+
+.filter-btn {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 1rem 1.5rem;
+  background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.85rem;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 2px 4px rgba(30, 58, 138, 0.2);
+  min-width: 120px;
+  justify-content: center;
+}
+
+.filter-btn:hover {
+  background: linear-gradient(135deg, #1e40af 0%, #2563eb 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 16px rgba(30, 58, 138, 0.3);
+}
+
+.filter-btn.active {
+  background: linear-gradient(135deg, #2563eb 0%, #3b82f6 100%);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3);
+}
+
+.dropdown-arrow {
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.dropdown-arrow.rotated {
+  transform: rotate(180deg);
+}
+
+.filter-badge {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  background: #ef4444;
+  color: white;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  font-weight: 700;
+  animation: badgePulse 0.6s ease-out;
+}
+
+@keyframes badgePulse {
+  0% { transform: scale(0); opacity: 0; }
+  50% { transform: scale(1.2); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.filter-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 380px;
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  border: 1px solid #e5e7eb;
+  z-index: 1000;
+  animation: dropdownSlideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+}
+
+@keyframes dropdownSlideIn {
+  0% { 
+    opacity: 0; 
+    transform: translateY(-10px) scale(0.95); 
+  }
+  100% { 
+    opacity: 1; 
+    transform: translateY(0) scale(1); 
+  }
+}
+
+.filter-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.25rem 1.5rem;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.filter-header h4 {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.clear-filters-btn {
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.clear-filters-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: translateY(-1px);
+}
+
+.filter-section {
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.filter-section:last-child {
+  border-bottom: none;
+}
+
+.filter-section-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  color: #374151;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.filter-options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.filter-option {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 2px solid transparent;
+}
+
+.filter-option:hover {
+  background: #f9fafb;
+  border-color: #e5e7eb;
+}
+
+.filter-option.selected {
+  background: #eff6ff;
+  border-color: #3b82f6;
+}
+
+.filter-radio {
+  width: 18px;
+  height: 18px;
+  accent-color: #3b82f6;
+  cursor: pointer;
+}
+
+.filter-option-text {
+  flex: 1;
+  font-size: 0.9rem;
+  color: #374151;
+  font-weight: 500;
+}
+
+.filter-count {
+  font-size: 0.8rem;
+  color: #6b7280;
+  font-weight: 400;
+}
+
+.custom-date-section {
+  margin-top: 0.75rem;
+  padding: 1rem;
+  background: #f9fafb;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+}
+
+.date-picker-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.custom-date-input {
+  width: 100%;
+  padding: 0.75rem 1rem 0.75rem 2.5rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  background: white;
+  transition: all 0.2s ease;
+}
+
+.custom-date-input:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.date-picker-wrapper svg {
+  position: absolute;
+  left: 0.75rem;
+  color: #6b7280;
+  pointer-events: none;
+}
+
+.active-filters-summary {
+  padding: 1rem 1.5rem;
+  background: #f8fafc;
+  border-top: 1px solid #e5e7eb;
+}
+
+.summary-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+  color: #374151;
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.active-filters-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.active-filter-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: #dbeafe;
+  color: #1e40af;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  border: 1px solid #bfdbfe;
+}
+
+.remove-filter-btn {
+  background: none;
+  border: none;
+  color: #1e40af;
+  font-size: 1rem;
+  font-weight: bold;
+  cursor: pointer;
+  padding: 0;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: all 0.2s ease;
+}
+
+.remove-filter-btn:hover {
+  background: #1e40af;
+  color: white;
+}
+
+/* NEW: tag chips */
+.tag-chip {
+  border: 1px solid #c7d2fe;
+  background: #eef2ff;
+  color: #1e40af;
+  border-radius: 16px;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.tag-chip:hover { filter: brightness(0.97); }
+.tag-chip.selected {
+  background: #1e3a8a;
+  color: #fff;
+  border-color: #1e3a8a;
+}
+
+.filter-results-summary {
+  padding: 1rem 1.5rem;
+  background: #f0f9ff;
+  border-top: 1px solid #e0f2fe;
+  text-align: center;
+}
+
+.results-text {
+  font-size: 0.85rem;
+  color: #0369a1;
+  font-weight: 500;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .filter-dropdown {
+    width: 320px;
+    right: -50px;
+  }
+  
+  .filter-btn {
+    min-width: 100px;
+    padding: 0.875rem 1.25rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .filter-dropdown {
+    width: 280px;
+    right: -80px;
+  }
+  
+  .filter-section {
+    padding: 1rem;
+  }
+  
+  .filter-header {
+    padding: 1rem;
+  }
+}
+
+
+.pdf-capture-mode td:nth-child(4) {
+  overflow: visible !important;
+  padding: 5px !important;
+}
+
+/* Preserve block layout: table, p, div stay block so "heading above table, note below" is correct in PDF */
+.pdf-capture-mode td:nth-child(4) table,
+.pdf-capture-mode td:nth-child(4) p,
+.pdf-capture-mode td:nth-child(4) div {
+  display: block !important;
+}
+.pdf-capture-mode td:nth-child(4) *:not(table):not(p):not(div) {
+  /* Removed display: inline-block !important; as it breaks inline span wrapping with background colors */
+}
+
+ /* Compact Government Style Table Headers */
+.table-headers {
+   background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%);
+  margin-bottom: 0.5rem;
+   border-radius: 8px 8px 0 0;
+   width: 100%;
+   box-sizing: border-box;
+   box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+   overflow: hidden;
+}
+
+.table-headers table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+   margin: 0;
+}
+
+.table-headers th {
+   color: white;
+   font-size: 0.65rem;
+   font-weight: 600;
+  text-align: left;
+   padding: 0.75rem;
+  white-space: normal;
+   border-right: 1px solid rgba(255, 255, 255, 0.2);
+   background: transparent;
+   line-height: 1.3;
+ }
+
+ .table-headers th:last-child {
+   border-right: none;
+ }
+
+ /* Compact Table rows */
+.table-row {
+  background: white;
+   border-radius: 0;
+   margin: 0.5rem 0;
+   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  text-align: center;
+   width: 100%;
+   box-sizing: border-box;
+   border: 1px solid #e9ecef;
+   overflow: visible; /* Allow action menus to extend outside row */
+ }
+
+ .table-row:last-child {
+   border-radius: 0 0 8px 8px;
+}
+
+.table-row table {
+   width: 100%;
+   margin: 0;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.table-row td {
+   padding: 0.75rem;
+   color: #495057;
+   font-size: 0.8rem;
+  vertical-align: top;
+   line-height: 1.4;
+  white-space: normal;
+  word-break: break-word;
+   border-right: 1px solid #f8f9fa;
+   background: white;
+   overflow: hidden;
+ }
+
+
+
+ .table-row td:last-child {
+   border-right: none;
+ }
+
+ /* Optimized Column widths - Maximum space for Action column */
+.table-headers th:nth-child(1),
+ .table-row td:nth-child(1) { 
+   width: 5%; 
+   min-width: 50px;
+ }
+
+.table-headers th:nth-child(2),
+ .table-row td:nth-child(2) { 
+   width: 10%; 
+   min-width: 100px;
+ }
+
+.table-headers th:nth-child(3),
+ .table-row td:nth-child(3) { 
+   width: 12%; 
+   min-width: 120px;
+ }
+
+.table-headers th:nth-child(4),
+ .table-row td:nth-child(4) { 
+   width: 55%; 
+   min-width: 400px;
+   overflow: hidden !important;
+   word-wrap: break-word;
+   white-space: normal;
+   text-align: left !important;
+ }
+
+.table-headers th:nth-child(5),
+ .table-row td:nth-child(5) { 
+   width: 6%; 
+   min-width: 70px;
+ }
+
+.table-headers th:nth-child(6),
+ .table-row td:nth-child(6) { 
+   width: 8%; 
+   min-width: 90px;
+ }
+
+.table-headers th:nth-child(7),
+ .table-row td:nth-child(7) { 
+   width: 4%; 
+   min-width: 50px;
+ }
+
+.table-headers th:nth-child(8),
+.table-row td:nth-child(8) { width: 8%; }
+
+.table-headers th:nth-child(9),
+.table-row td:nth-child(9) { width: 5%; }
+
+
+.status-draft {
+  color: #a53412 !important;
+  background-color: #ebbf80;
+  padding: 12px 8px;
+  border-radius: 24px;
+  font-size: 0.8rem;
+  font-weight: bolder;
+}
+
+.status-review {
+  color: #1e40af !important;
+  background-color: #dbeafe;
+  padding: 12px 7px;
+  border-radius: 24px;
+  font-size: 0.55rem;
+  font-weight: bolder;
+}
+
+.status-final-review {
+  color: #5b21b6 !important;
+  background-color: #ede9fe;
+  padding: 12px 8px;
+  border-radius: 4px;
+  font-size: 0.55rem;
+  font-weight: bold;
+}
+
+.status-unknown {
+  color: #6B7280 !important;
+  background-color: #F3F4F6;
+  padding: 12px 8px;
+  border-radius: 24px;
+  font-size: 0.8rem;
+  font-weight: bolder;
+}
+
+.status-approved {
+  color: #047857 !important;
+  background-color: #d1fae5;
+  padding: 12px 8px;
+  border-radius: 24px;
+  font-size: 0.8rem;
+  font-weight: bolder;
+  border: 1px solid #10b981;
+  letter-spacing: 0.02em;
+  display: inline-block;
+  min-width: 80px;
+  text-align: center;
+}
+
+.status-editor {
+  color: #a15a00 !important;
+  background-color: #f6c08b;
+  padding: 12px 8px;
+  border-radius: 24px;
+  font-size: 0.8rem;
+  font-weight: bolder;
+  border: 1px solid #f6c08b;
+  letter-spacing: 0.02em;
+  display: inline-block;
+  min-width: 80px;
+  text-align: center;
+}
+
+.status-reviewer {
+  color: #2563eb !important;
+  background-color: #e3edff;
+  padding: 12px 8px;
+  border-radius: 24px;
+  font-size: 0.8rem;
+  font-weight: bolder;
+  border: 1px solid #2563eb;
+  letter-spacing: 0.02em;
+  display: inline-block;
+  min-width: 80px;
+  text-align: center;
+}
+
+/* Actions cell styling */
+.actions-cell {
+  padding: 1rem 0.8rem !important;
+  text-align: center !important;
+  vertical-align: top !important;
+  overflow: visible !important;
+  position: static !important; /* Remove stacking context */
+}
+
+.table-row td:nth-child(8) {
+  padding: 1rem 0.8rem !important;
+  text-align: left !important;
+  vertical-align: top !important;
+  overflow: visible !important;
+  position: relative;
+}
+
+.action-menu-container {
+  position: static; /* Remove stacking context */
+  overflow: visible !important;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.action-trigger {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: transparent;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #6B7280;
+  font-size: 1.25rem;
+  transition: all 0.2s;
+  cursor: pointer;
+}
+
+.action-trigger:hover {
+  background: #F3F4F6;
+  color: #374151;
+  transform: scale(1.1);
+}
+
+/* Active state when menu is open */
+.action-trigger.active {
+  background: #EBF4FF;
+  color: #2563EB;
+  transform: scale(1.1);
+}
+
+/* Global Action Menu - Outside table structure */
+.global-action-menu {
+  position: fixed;
+  background: white;
+  border: 1px solid #E5E7EB;
+  border-radius: 0.375rem;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  min-width: 180px;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-10px);
+  transition: all 0.15s ease; /* Faster transition */
+  z-index: 99999 !important; /* Highest possible z-index */
+  pointer-events: none; /* Prevent interaction when hidden */
+  /* Add a small padding area to help with hover */
+  padding: 0.25rem 0;
+}
+
+/* Tags popover styles */
+.tags-popover {
+  position: fixed;
+  width: 240px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04);
+  padding: 6px 0;
+  overflow: hidden; /* clip inner overflow */
+}
+.tags-popover-list {
+  max-height: 144px; /* about 3 items */
+  overflow-y: auto;
+  /* Match filter dropdown scrollbar */
+  scrollbar-width: thin;
+  scrollbar-color: #c7d2fe #f1f5f9;
+  overflow-x: hidden; /* prevent horizontal scroll */
+}
+.tags-popover-list::-webkit-scrollbar { width: 8px; }
+.tags-popover-list::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 4px; }
+.tags-popover-list::-webkit-scrollbar-thumb { background-color: #c7d2fe; border-radius: 4px; border: 2px solid #f1f5f9; }
+.tags-popover-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: #1f2937;
+  background: transparent;
+  border: none;
+  white-space: normal; /* allow wrap */
+  word-break: break-word; /* break long tokens */
+}
+.tags-popover-item + .tags-popover-item { border-top: 1px solid #f3f4f6; }
+.tags-popover-empty {
+  color:#6b7280;
+  font-size:12px;
+  padding:8px 12px;
+}
+
+/* Tags Centered Modal */
+.tags-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100000;
+}
+.tags-modal {
+  width: min(560px, 92vw);
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);
+  overflow: hidden;
+}
+.tags-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%);
+  color: #fff;
+}
+.tags-modal-title { font-size: 1rem; font-weight: 600; }
+.tags-modal-close {
+  background: transparent;
+  border: none;
+  color: #fff;
+  font-size: 20px;
+  cursor: pointer;
+}
+.tags-modal-body {
+  padding: 16px;
+}
+.tags-modal-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.tags-chip {
+  border: 1px solid #c7d2fe;
+  background: #eef2ff;
+  color: #1e40af;
+  border-radius: 9999px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 500;
+}
+.tags-empty-state {
+  color: #6b7280;
+  font-size: 0.9rem;
+  text-align: center;
+  padding: 24px 8px;
+}
+
+.global-action-menu.show {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+  pointer-events: auto; /* Enable interaction when visible */
+}
+
+/* Remove old action-menu styles since we're using global menu */
+.action-menu {
+  display: none !important;
+}
+
+.menu-item {
+  width: 100%;
+  text-align: left;
+  padding: 0.75rem 1rem;
+  border: none;
+  background: none;
+  font-size: 0.875rem;
+  transition: all 0.2s;
+  cursor: pointer;
+  display: block;
+  border-radius: 0.25rem;
+  margin: 0.25rem;
+}
+
+.menu-item:nth-child(1) {
+  color: #3B82F6;
+  font-weight: bold;
+}
+.menu-item:nth-child(1):hover {
+  background-color: #d7e1ef;
+  box-shadow: 0 2px 4px rgba(59, 130, 246, 0.1);
+}
+
+.menu-item:nth-child(2) {
+  color: #EF4444;
+  font-weight: bold;
+}
+.menu-item:nth-child(2):hover {
+  background-color: #f5d8d8;
+  box-shadow: 0 2px 4px rgba(239, 68, 68, 0.1);
+}
+
+.menu-item:nth-child(3) {
+  font-weight: bold;
+  color: #10B981;
+}
+.menu-item:nth-child(3):hover {
+  background-color: #e2f5ee;
+  box-shadow: 0 2px 4px rgba(16, 185, 129, 0.1);
+}
+
+.menu-item:nth-child(4) {
+  color: #8B5CF6;
+  font-weight: bold;
+}
+.menu-item.tags {
+  color: #1E40AF; /* indigo-800 */
+  font-weight: bold;
+}
+.menu-item.tags:hover {
+  background: #E0E7FF; /* indigo-100 */
+  color: #3730A3; /* indigo-800 darker */
+}
+.pdf-capture-mode ul {
+  list-style: none !important;
+  padding-left: 1.5em;
+}
+.pdf-capture-mode ul li::before {
+  content: '• ';
+  color: #222;
+  font-size: 1em;
+  margin-right: 4px;
+}
+
+.pdf-capture-mode ol {
+  list-style: none !important;
+  counter-reset: pdfcounter;
+  padding-left: 1.5em;
+}
+.pdf-capture-mode ol li {
+  counter-increment: pdfcounter;
+}
+.pdf-capture-mode ol li::before {
+  content: counter(pdfcounter) ". ";
+  color: #222;
+  font-size: 1em;
+  margin-right: 4px;
+}
+
+.menu-item:nth-child(4):hover {
+  background-color: #F5F3FF;
+  box-shadow: 0 2px 4px rgba(139, 92, 246, 0.1);
+}
+
+.highlighted-row {
+  background-color: #F8FAFC;
+  border: 1px solid #3B82F6;
+}
+
+.table-row:hover {
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+ /* Action Content Styling - Compact with Auto-scaling */
+.action-content-cell {
+  text-align: left !important;
+  vertical-align: top !important;
+   padding: 0.75rem !important;
+   overflow: hidden !important;
+   word-wrap: break-word;
+   line-height: 1.4;
+   max-width: 100% !important;
+   position: relative;
+   box-sizing: border-box;
+   /* Smooth transition for scaling */
+   transition: transform 0.3s ease;
+ }
+
+ .action-content-cell ul, .action-content-cell ol {
+   margin: 6px 0;
+   padding-left: 0;
+   list-style: none;
+ }
+
+ .action-content-cell li {
+   margin: 3px 0;
+   list-style: none;
+  display: flex;
+  align-items: flex-start;
+   line-height: 1.3;
+ }
+
+ .action-content-cell .list-marker {
+   font-weight: 600;
+   margin-right: 6px;
+   min-width: 18px;
+   color: #1e40af;
+  flex-shrink: 0;
+ }
+
+ /* Compact table styling within action content */
+ .action-content-cell table {
+   width: 100% !important;
+   max-width: 100% !important;
+   border-collapse: collapse !important;
+   margin: 0.4rem 0 !important;
+   font-size: 0.75rem !important;
+   table-layout: auto !important;
+   overflow-wrap: break-word !important;
+   /* Smooth transition for table scaling */
+   transition: transform 0.3s ease;
+   transform-origin: top left;
+ }
+
+ .action-content-cell table th,
+ .action-content-cell table td {
+   border: 1px solid #222 !important;
+   padding: 3px !important;
+   text-align: center !important;
+   vertical-align: middle !important;
+   word-wrap: break-word !important;
+   overflow-wrap: break-word !important;
+   font-size: 10px !important;
+ }
+
+ .action-content-cell table th {
+   background-color: #f3f4f6 !important;
+   font-weight: 600 !important;
+   font-size: 0.7rem !important;
+ }
+
+ .action-content-cell table td {
+   font-size: 0.7rem !important;
+ }
+
+/* 🎯 UNIFIED: Clean Action Node Hierarchical Styling with DEEP SELECTORS */
+.action-content-cell /deep/ .action-node {
+   display: flex !important;
+   align-items: flex-start !important;
+  margin: 4px 0 !important;
+  padding: 2px 0 !important;
+   line-height: 1.4 !important;
+  font-size: inherit !important; /* Prevent auto-scaling interference */
+ }
+
+.action-content-cell /deep/ .action-node .node-marker {
+   flex-shrink: 0 !important;
+   margin-right: 8px !important;
+   font-weight: bold !important;
+   min-width: 24px !important;
+  text-align: left !important;
+ }
+
+.action-content-cell /deep/ .action-node .node-content {
+   flex: 1 !important;
+   word-break: break-word !important;
+   color: #000 !important;
+ }
+
+/* 📐 ENHANCED: Hierarchical indentation with DEEP SELECTORS - REDUCED SPACING! */
+.action-content-cell /deep/ .action-node.level-1 { 
+  margin-left: 0px !important; 
+  /* background-color: rgba(59, 130, 246, 0.02) !important; */
+}
+.action-content-cell /deep/ .action-node.level-2 { 
+  margin-left: 20px !important; 
+  /* background-color: rgba(16, 185, 129, 0.02) !important; */
+  /* border-left: 2px solid rgba(16, 185, 129, 0.3) !important; */
+  padding-left: 4px !important;
+}
+.action-content-cell /deep/ .action-node.level-3 { 
+  margin-left: 40px !important; 
+  /* background-color: rgba(245, 158, 11, 0.02) !important; */
+  /* border-left: 2px solid rgba(139, 92, 246, 0.3) !important; */
+  padding-left: 6px !important;
+}
+.action-content-cell /deep/ .action-node.level-4 { 
+  margin-left: 60px !important; 
+  /* background-color: rgba(245, 158, 11, 0.02) !important; */
+  /* border-left: 2px solid rgba(245, 158, 11, 0.3) !important; */
+  padding-left: 6px !important;
+}
+.action-content-cell /deep/ .action-node.level-5 { 
+  margin-left: 80px !important; 
+  /* background-color: rgba(239, 68, 68, 0.02) !important; */
+  /* border-left: 2px solid rgba(239, 68, 68, 0.3) !important; */
+  padding-left: 6px !important;
+}
+
+/* 🔧 HIGH SPECIFICITY: Override rules for table context - REDUCED SPACING! */
+table .action-content-cell /deep/ .action-node.level-2,
+td .action-content-cell /deep/ .action-node.level-2 {
+  margin-left: 20px !important;
+  padding-left: 4px !important;
+  /* background-color: rgba(16, 185, 129, 0.05) !important; */
+  /* border-left: 3px solid rgba(16, 185, 129, 0.4) !important; */
+}
+table .action-content-cell /deep/ .action-node.level-3,
+td .action-content-cell /deep/ .action-node.level-3 {
+  margin-left: 40px !important;
+  padding-left: 6px !important;
+  /* background-color: rgba(245, 158, 11, 0.05) !important; */
+  /* border-left: 3px solid rgba(139, 92, 246, 0.4) !important; */
+}
+table .action-content-cell /deep/ .action-node.level-4,
+td .action-content-cell /deep/ .action-node.level-4 {
+  margin-left: 60px !important;
+  padding-left: 6px !important;
+  /* background-color: rgba(139, 92, 246, 0.05) !important; */
+  /* border-left: 3px solid rgba(245, 158, 11, 0.4) !important; */
+}
+
+/* 🎨 UNIFIED: List style colors with DEEP SELECTORS (clear visual hierarchy) */
+.action-content-cell /deep/ .action-node.style-decimal .node-marker { 
+  /* color: #1e40af !important; */
+  font-weight: bold !important; 
+}
+.action-content-cell /deep/ .action-node.style-lower-alpha .node-marker { 
+  /* color: #059669 !important; */
+  font-weight: bold !important; 
+}
+.action-content-cell /deep/ .action-node.style-lower-roman .node-marker { 
+  /* color: #7C3AED !important; */
+  font-weight: bold !important; 
+}
+.action-content-cell /deep/ .action-node.style-bullet .node-marker { 
+  /* color: #DC2626 !important; */
+  font-weight: bold !important; 
+}
+
+/* 📅 Review date styling with DEEP SELECTORS - yellow highlight */
+.action-content-cell /deep/ .action-node .node-content .review-date {
+   font-size: 0.85em !important;
+   color: #333 !important;
+   font-weight: 700 !important;
+   margin-left: 8px !important;
+  /* background-color: #ffeb3b !important; */
+   padding: 2px 6px !important;
+   border-radius: 4px !important;
+   display: inline-block !important;
+   line-height: 1.2 !important;
+ }
+
+.action-content-cell /deep/ .action-node .node-content .review-date.today {
+  color: #d32f2f !important; /* Red text for today */
+   font-weight: 600 !important;
+}
+
+/* ✅ Completed nodes styling with DEEP SELECTORS - GREEN COLOR */
+.action-content-cell /deep/ .action-node.completed { 
+  color: green !important;
+  /* background-color: rgba(16, 185, 129, 0.1) !important; */
+  /* border-left: 3px solid #10b981 !important; Green left border */
+  border-radius: 4px !important;
+  padding: 4px 8px !important;
+}
+.action-content-cell /deep/ .action-node.completed .node-content { 
+  color: rgb(0, 255, 0) !important;
+  font-weight: 500 !important; /* Slightly bold */
+}
+.action-content-cell /deep/ .action-node.completed .node-marker { 
+  /* color: #10b981 !important; */
+  font-weight: 600 !important;
+}
+
+/* 🔧 FALLBACK: Alternative deep selector syntaxes for maximum compatibility - REDUCED SPACING! */
+.action-content-cell >>> .action-node.level-2 { 
+  margin-left: 20px !important; 
+  /* background-color: rgba(16, 185, 129, 0.02) !important; */
+  /* border-left: 2px solid rgba(16, 185, 129, 0.3) !important; */
+  padding-left: 2px !important;
+}
+.action-content-cell >>> .action-node.level-3 { 
+  margin-left: 40px !important; 
+  /* background-color: rgba(245, 158, 11, 0.02) !important; */
+  /* border-left: 2px solid rgba(245, 158, 11, 0.3) !important; */
+  padding-left: 2px !important;
+}
+.action-content-cell >>> .action-node.level-4 { 
+  margin-left: 60px !important; 
+  /* background-color: rgba(139, 92, 246, 0.02) !important; */
+  /* border-left: 2px solid rgba(245, 158, 11, 0.3) !important; */
+  padding-left: 2px !important;
+ }
+
+/* 💪 NUCLEAR OPTION: Global styles that bypass scoping entirely - REDUCED SPACING! */
+td.action-content-cell .action-node.level-2 { 
+  margin-left: 20px !important; 
+  /* background-color: rgba(16, 185, 129, 0.02) !important; */
+  /* border-left: 2px solid rgba(16, 185, 129, 0.3) !important; */
+  padding-left: 2px !important;
+}
+td.action-content-cell .action-node.level-3 { 
+  margin-left: 40px !important; 
+  /* background-color: rgba(245, 158, 11, 0.02) !important; */
+  /* border-left: 2px solid rgba(245, 158, 11, 0.3) !important; */
+  padding-left: 2px !important;
+}
+td.action-content-cell .action-node.level-4 { 
+  margin-left: 60px !important; 
+  /* background-color: rgba(139, 92, 246, 0.02) !important; */
+  /* border-left: 2px solid rgba(245, 158, 11, 0.3) !important; */
+  padding-left: 2px !important;
+}
+ 
+ .action-content-cell p { margin: 0.25em 0 !important; }
+ .action-content-cell br { line-height: 1.2 !important; }
+
+ /* ✅ NEW: Font-size based auto-scaling classes - NO MORE TRANSFORM SCALING */
+ /* Small font reduction for moderate overflow */
+ .action-content-cell.auto-scaled-small {
+   font-size: 0.8em !important;
+   line-height: 1.25 !important;
+ }
+
+ /* Tiny font reduction for severe overflow */
+ .action-content-cell.auto-scaled-tiny {
+   font-size: 0.7em !important;
+   line-height: 1.2 !important;
+ }
+
+ /* Ensure auto-scaled content maintains proper spacing and structure */
+ .action-content-cell.auto-scaled-small /deep/ .action-node,
+ .action-content-cell.auto-scaled-tiny /deep/ .action-node {
+   margin: 2px 0 !important;
+   padding: 1px 0 !important;
+   display: flex !important;
+   align-items: flex-start !important;
+ }
+
+ /* Preserve hierarchical indentation even when scaled - REDUCED SPACING! */
+ .action-content-cell.auto-scaled-small /deep/ .action-node.level-1,
+ .action-content-cell.auto-scaled-tiny /deep/ .action-node.level-1 { margin-left: 0 !important; }
+ .action-content-cell.auto-scaled-small /deep/ .action-node.level-2,
+ .action-content-cell.auto-scaled-tiny /deep/ .action-node.level-2 { margin-left: 6px !important; }
+ .action-content-cell.auto-scaled-small /deep/ .action-node.level-3,
+ .action-content-cell.auto-scaled-tiny /deep/ .action-node.level-3 { margin-left: 12px !important; }
+ .action-content-cell.auto-scaled-small /deep/ .action-node.level-4,
+ .action-content-cell.auto-scaled-tiny /deep/ .action-node.level-4 { margin-left: 18px !important; }
+
+ /* Auto-scaled table improvements */
+ .action-content-cell.auto-scaled-small /deep/ table,
+ .action-content-cell.auto-scaled-tiny /deep/ table {
+   margin: 0.2rem 0 !important;
+ }
+
+ .action-content-cell.auto-scaled-small /deep/ table th,
+ .action-content-cell.auto-scaled-small /deep/ table td,
+ .action-content-cell.auto-scaled-tiny /deep/ table th,
+ .action-content-cell.auto-scaled-tiny /deep/ table td {
+   padding: 3px 4px !important;
+ }
+
+ /* Table-specific font scaling with deep selectors */
+ .action-content-cell /deep/ table.scaled-table {
+   transform: none !important; /* Remove any transform scaling */
+ }
+
+ /* Ensure minimum cell width is always maintained */
+ .table-row td:nth-child(4) {
+   min-width: 400px !important; /* Force minimum width for action column */
+   width: 55% !important;
+   max-width: none !important;
+ }
+
+.download-pdf-btn {
+   padding: 1rem 1.5rem;
+   background: linear-gradient(135deg, #059669 0%, #10b981 100%);
+  color: white;
+  border: none;
+   border-radius: 6px;
+   cursor: pointer;
+   font-weight: 600;
+   font-size: 0.85rem;
+   transition: all 0.2s ease;
+   box-shadow: 0 2px 4px rgba(5, 150, 105, 0.2);
+}
+
+.download-pdf-btn:hover {
+   background: linear-gradient(135deg, #047857 0%, #059669 100%);
+   transform: translateY(-1px);
+   box-shadow: 0 4px 8px rgba(5, 150, 105, 0.3);
+}
+
+/* PDF Export: Strict fixed layout and wrapping for .pdf-capture-mode */
+.pdf-capture-mode table {
+  table-layout: fixed !important;
+  width: 100% !important;
+  border-collapse: collapse !important;
+  border: 1px solid #ddd !important;
+}
+.pdf-capture-mode th, .pdf-capture-mode td {
+  border: 1px solid #ddd !important;
+  padding: 2px 4px !important;
+  word-break: break-word !important;
+  overflow-wrap: break-word !important;
+  white-space: pre-line !important;
+  font-size: 10px !important;
+  line-height: 1.3 !important;
+  box-sizing: border-box !important;
+  max-width: none !important;
+}
+.pdf-capture-mode td {
+  max-width: none !important;
+}
+.pdf-capture-mode td:nth-child(4) {
+  /* Action to be Taken column: use JS-applied width (scaledColumnWidths[3]); strict wrapping */
+  word-break: break-word !important;
+  overflow-wrap: break-word !important;
+  white-space: pre-line !important;
+  font-size: 10px !important;
+  line-height: 1.3 !important;
+  vertical-align: top !important;
+  overflow: visible !important;
+}
+.pdf-capture-mode td * {
+  word-break: break-word !important;
+  overflow-wrap: break-word !important;
+}
+
+.pdf-capture-mode td div,
+.pdf-capture-mode td p,
+.pdf-capture-mode td table {
+  white-space: pre-line !important;
+  max-width: 100% !important;
+}
+
+.pdf-capture-mode td span,
+.pdf-capture-mode td b,
+.pdf-capture-mode td strong,
+.pdf-capture-mode td i,
+.pdf-capture-mode td em,
+.pdf-capture-mode td u,
+.pdf-capture-mode td font,
+.pdf-capture-mode td a {
+  white-space: normal !important;
+  max-width: none !important;
+  -webkit-box-decoration-break: clone !important;
+  box-decoration-break: clone !important;
+}
+.pdf-capture-mode ul, .pdf-capture-mode ol {
+  padding-left: 18px !important;
+  margin: 0.2em 0 !important;
+}
+.pdf-capture-mode li {
+  word-break: break-word !important;
+  overflow-wrap: break-word !important;
+  white-space: pre-line !important;
+  max-width: 100% !important;
+}
+.pdf-capture-mode table table {
+  table-layout: fixed !important;
+  width: 100% !important;
+  border-collapse: collapse !important;
+}
+.pdf-capture-mode table table th, .pdf-capture-mode table table td {
+  font-size: 9px !important;
+  padding: 2px 3px !important;
+  word-break: break-word !important;
+  overflow-wrap: break-word !important;
+  white-space: pre-line !important;
+  max-width: 100% !important;
+}
+
+/* Table styling for tables inside 'Action to be Taken' (dashboard and PDF) */
+.action-content-cell table,
+.action-content-cell th,
+.action-content-cell td,
+.pdf-capture-mode .action-content-cell table,
+.pdf-capture-mode .action-content-cell th,
+.pdf-capture-mode .action-content-cell td,
+.action-content-cell table table,
+.action-content-cell table th,
+.action-content-cell table td {
+  border: 1px solid #222 !important;
+  border-collapse: collapse !important;
+  padding: 3px !important;
+  margin: 0 !important;
+  box-sizing: border-box !important;
+  text-align: center !important;
+  vertical-align: top !important;
+}
+
+.action-content-cell table {
+  width: 100% !important;
+  table-layout: fixed !important;
+  margin: 0 !important;
+}
+
+.action-content-cell th {
+  background: #f2f2f2 !important;
+  font-weight: 600 !important;
+  color: #222 !important;
+}
+
+/* Ensure nested tables also get the same styling */
+.action-content-cell table table,
+.action-content-cell table th,
+.action-content-cell table td {
+  border: 1px solid #222 !important;
+  padding: 1px !important;
+  background: #fff !important;
+  font-size: 11px !important;
+}
+
+.yellow-bg-bold {
+  background: #ffeb3b !important;
+  font-weight: bold !important;
+  border-radius: 4px;
+  padding: 2px 6px;
+  display: inline-block;
+  vertical-align: top;
+}
+
+/* PDF-specific vertical alignment for highlight columns */
+.pdf-capture-mode .original-date-cell,
+.pdf-capture-mode .responsibility-cell,
+.pdf-capture-mode .review-date-cell {
+  vertical-align: top !important;
+}
+
+.pdf-capture-mode .yellow-bg-bold {
+  display: inline-block !important;
+  vertical-align: top !important;
+}
+
+/* Ensure bold styling for S.No, Sector/Division, and Description columns in PDF */
+.pdf-capture-mode td:nth-child(1) strong,
+.pdf-capture-mode td:nth-child(2) strong,
+.pdf-capture-mode td:nth-child(3) strong {
+  font-weight: bold !important;
+}
+.red-text {
+  color: #d32f2f !important;
+}
+.black-text {
+  color: #222 !important;
+}
+.review-date-cell, .responsibility-cell {
+  text-align: center !important;
+}
+
+/* PDF-specific: Tight vertical spacing but allow gap around tables so text above/below stays clear */
+.pdf-capture-mode .action-content-cell *,
+.pdf-capture-mode .action-node,
+.pdf-capture-mode .action-node * {
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  line-height: 1.1 !important;
+}
+
+/* Keep small gap above/below tables so "Expenditure status..." and "Aug-25 targets..." stay separated */
+.pdf-capture-mode .action-content-cell table {
+  margin-top: 6px !important;
+  margin-bottom: 6px !important;
+}
+
+.pdf-capture-mode p,
+.pdf-capture-mode li,
+.pdf-capture-mode div {
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  line-height: 1.1 !important;
+}
+
+.search-actions-row {
+  display: flex;
+  align-items: stretch;
+  gap: 1.25rem;
+  margin-bottom: 1.5rem;
+  width: 100%;
+  position: relative;
+}
+
+.search-wrapper {
+  flex: 1 1 0%;
+  min-width: 0;
+  margin-bottom: 0;
+}
+
+.dashboard-actions-inline {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-left: 1.25rem;
+}
+
+@media (max-width: 900px) {
+  .search-actions-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
+  }
+  .dashboard-actions-inline {
+    margin-left: 0;
+    justify-content: flex-end;
+  }
+}
+
+.responsibility-cell {
+  position: relative;
+  padding: 0.75rem !important;
+  min-height: 50px;
+  overflow: visible !important; /* Ensure badges are visible */
+}
+
+/* Only keep the highlight-connection class since it's still used */
+.highlight-connection {
+  background-color: #ffeb3b !important;
+  color: #000000 !important;
+  box-shadow: 0 0 0 2px rgba(251, 191, 36, 0.5) !important;
+}
+
+/* Ensure action nodes with reviewers are properly marked */
+.action-content-cell /deep/ .action-node.has-reviewer {
+  position: relative !important;
+  z-index: 1 !important;
+}
+
+/* Hide reviewer badges in action content for TentativeDashboard */
+.action-content-cell /deep/ .reviewer-badge-parallel {
+  display: none !important;
+}
+
+/* But keep the reviewer badges in the responsibility cell visible */
+.responsibility-cell .reviewer-badge-parallel {
+  display: inline-block !important;
+  background-color: #ffeb3b !important;
+  font-weight: bold !important;
+  border-radius: 4px !important;
+  padding: 2px 6px !important;
+  color: #000000 !important;
+  margin: 2px 0 !important;
+  opacity: 1 !important;
+  transition: all 0.2s ease !important;
+  cursor: pointer !important;
+  z-index: 10 !important;
+  position: absolute !important;
+  left: 6px !important;
+  width: calc(100% - 12px) !important;
+  text-align: left !important;
+  box-sizing: border-box !important;
+}
+
+/* Tag suggestions (Filter -> Tags) */
+.filter-tag-suggest-dropdown {
+  position: relative;
+  margin-bottom: 8px;
+}
+.filter-tag-suggest-dropdown.flip .filter-tag-suggest-list {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  right: 0;
+}
+.filter-tag-suggest-dropdown:not(.flip) .filter-tag-suggest-list {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+}
+.filter-tag-suggest-list {
+  /* ~3 items visible; rest scroll */
+  max-height: 156px;
+  overflow-y: auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.12);
+  padding: 4px 0;
+  overflow-x: hidden;
+}
+.filter-tag-suggest-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  padding: 10px 14px;
+  margin: 0;
+  font-size: 13px;
+  color: #1f2937;
+  cursor: pointer;
+}
+.filter-tag-suggest-item:hover { background: #f9fafb; }
+.filter-tag-suggest-empty {
+  padding: 8px;
+  color: #6b7280;
+  font-size: 12px;
+}
+.filter-tag-suggest-item.selected,
+.filter-tag-suggest-item:disabled {
+  color: #9ca3af;
+  background: #fafafa;
+  cursor: not-allowed;
+}
+
+/* Subtle custom scrollbar just for the dropdown */
+.filter-tag-suggest-list::-webkit-scrollbar {
+  width: 8px;
+}
+.filter-tag-suggest-list::-webkit-scrollbar-track {
+  background: #f3f4f6;
+  border-radius: 10px;
+}
+.filter-tag-suggest-list::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 10px;
+}
+
+/* Styled search input for Tags filter */
+.tag-search-input {
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  padding: 10px 36px 10px 40px; /* left room for icon */
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+  background: #fff url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="%239ca3af" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>') no-repeat 12px center;
+}
+.tag-search-input:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59,130,246,0.15);
+}
+</style>
+
+<!-- GLOBAL TABLE BOUNDARY STYLES: Not scoped, only border/padding, no background/color override -->
+<style>
+.action-content-cell table,
+.action-content-cell th,
+.action-content-cell td,
+.pdf-capture-mode .action-content-cell table,
+.pdf-capture-mode .action-content-cell th,
+.pdf-capture-mode .action-content-cell td,
+.action-content-cell table table,
+.action-content-cell table th,
+.action-content-cell table td {
+  border: 1px solid #222 !important;
+  border-collapse: collapse !important;
+  padding: 3px !important;
+  margin: 0 !important;
+  box-sizing: border-box !important;
+  text-align: center !important;
+  vertical-align: top !important;
+}
+</style>
+
+<!-- ADVANCED SEARCH SYSTEM STYLES -->
+<style>
+.search-container {
+  margin-bottom: 1.5rem;
+  position: relative;
+  z-index: 10;
+  width: 100%;
+}
+
+.search-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.search-input-group {
+  display: flex;
+  align-items: center;
+  padding: 0.5rem;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+
+.search-input-group:focus-within {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+}
+
+.search-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  color: #6b7280;
+  margin-right: 0.5rem;
+}
+
+.search-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 0.875rem;
+  color: #1f2937;
+  padding: 0.25rem;
+}
+
+.search-input::placeholder {
+  color: #9ca3af;
+}
+
+.clear-search-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  background: transparent;
+  border: none;
+  color: #9ca3af;
+  cursor: pointer;
+  padding: 0;
+  margin-left: 0.25rem;
+  transition: all 0.2s ease;
+}
+
+.clear-search-btn:hover {
+  color: #4b5563;
+}
+
+.search-results-info {
+  margin-top: 0.5rem;
+  padding: 0.5rem;
+  background: #f9fafb;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  color: #6b7280;
+}
+
+.results-count {
+  font-weight: 500;
+  color: #4b5563;
+}
+
+.search-stats {
+  color: #6b7280;
+}
+
+.search-suggestions {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-top: none;
+  border-radius: 0 0 12px 12px;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  max-height: 400px;
+  overflow-y: auto;
+  z-index: 20;
+}
+
+.suggestion-item {
+  display: flex;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.suggestion-item:last-child {
+  border-bottom: none;
+}
+
+.suggestion-item:hover {
+  background: #f8fafc;
+  transform: translateX(4px);
+}
+
+.suggestion-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.suggestion-title {
+  font-weight: 600;
+  color: #1f2937;
+  margin-bottom: 0.25rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.suggestion-meta {
+  font-size: 0.8125rem;
+  color: #6b7280;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.suggestion-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  color: #9ca3af;
+  margin-left: 0.75rem;
+  transition: all 0.2s ease;
+}
+
+.suggestion-item:hover .suggestion-icon {
+  color: #3b82f6;
+  transform: translateX(2px);
+}
+
+/* Search highlight animation for matched tasks */
+.search-highlight {
+  animation: searchPulse 2s ease-in-out;
+}
+
+@keyframes searchPulse {
+  0%, 100% {
+    background-color: transparent;
+    box-shadow: none;
+  }
+  25% {
+    background-color: rgba(59, 130, 246, 0.1);
+    box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.2);
+  }
+  50% {
+    background-color: rgba(59, 130, 246, 0.15);
+    box-shadow: 0 0 0 6px rgba(59, 130, 246, 0.15);
+  }
+  75% {
+    background-color: rgba(59, 130, 246, 0.1);
+    box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1);
+  }
+}
+
+/* Responsive design for search */
+@media (max-width: 768px) {
+  .search-input-group {
+    padding: 0.5rem 0.75rem;
+  }
+  
+  .search-icon {
+    width: 32px;
+    height: 32px;
+    margin-right: 0.5rem;
+  }
+  
+  .search-input {
+    font-size: 0.875rem;
+  }
+  
+  .search-results-info {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+  }
+  
+  .search-stats {
+    font-size: 0.75rem;
+  }
+  
+  .suggestion-item {
+    padding: 0.5rem 0.75rem;
+  }
+  
+  .suggestion-title {
+    font-size: 0.875rem;
+  }
+  
+  .suggestion-meta {
+    font-size: 0.75rem;
+  }
+}
+
+/* Keyboard navigation support */
+.search-suggestions:focus-within .suggestion-item:focus {
+  background: #eff6ff;
+  outline: 2px solid #3b82f6;
+  outline-offset: -2px;
+}
+
+/* Loading state for search */
+.search-input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Empty state styling */
+.search-suggestions:empty::after {
+  content: 'No suggestions found';
+  display: block;
+  padding: 1rem;
+  text-align: center;
+  color: #6b7280;
+  font-style: italic;
+}
+
+/* Smooth transitions for all search elements */
+.search-container * {
+  transition: all 0.2s ease;
+}
+
+/* Enhanced focus states for accessibility */
+.search-input:focus {
+  outline: none;
+}
+
+.search-wrapper:focus-within {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+/* Performance optimizations */
+.search-suggestions {
+  will-change: transform, opacity;
+  transform: translateZ(0);
+}
+
+.suggestion-item {
+  will-change: transform, background-color;
+}
+</style>

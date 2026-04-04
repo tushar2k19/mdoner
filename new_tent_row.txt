@@ -1,0 +1,39 @@
+<div v-for="(task, index) in displayTasks"
+         :key="task.id"
+         :data-task-id="task.id"
+         :data-review-date="task.review_date != null && task.review_date !== '' ? String(task.review_date) : ''"
+         class="table-row"
+         :class="{ 
+           'highlighted-row': String(task.id) === String($route.query.highlightTaskId),
+           'search-highlight': searchQuery.length > 0 && isTaskInSearchResults(task.id),
+           'agenda-range-row-highlight': taskInAgendaRange(task)
+         }">
+      <table>
+        <tr>
+          <td><strong>{{ getDisplayIndex(index) }}</strong></td>
+          <td><strong>{{ task.sector_division }}</strong></td>
+          <td>
+            <strong>{{ task.description }}</strong>
+          </td>
+          <td v-html="task.action_to_be_taken" class="action-content-cell" 
+              @click="debugContent(task)"></td>
+          <td class="original-date-cell" :style="pdfMode ? 'vertical-align: top;' : ''">
+            <span :class="getHighlightClass(task.review_date)">{{ formatDate(task.original_date) }}</span>
+          </td>
+          <td class="responsibility-cell" :style="pdfMode ? 'vertical-align: top;' : ''">
+            <span :class="getHighlightClass(task.review_date)">{{ task.responsibility }}</span>
+          </td>
+          <td class="review-date-cell" :style="pdfMode ? 'vertical-align: top;' : ''">
+            <span :class="getHighlightClass(task.review_date)">{{ formatDate(task.review_date) }}</span>
+          </td>
+          <td><span :class="statusClass[task.status || 'unknown']">{{ formatStatus(task.status) }}</span></td>
+          <td class="actions-cell">
+            <div class="action-menu-container">
+              <button class="action-trigger"
+                      :class="{ 'active': activeMenuId === task.id }"
+                      @mouseenter="showActionMenu(task.id, $event)"
+                      @mouseleave="hideActionMenu(task.id)"
+                      :data-task-id="task.id">
+                ⋮
+              </button>
+            
