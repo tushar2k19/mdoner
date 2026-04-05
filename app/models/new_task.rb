@@ -6,6 +6,7 @@ class NewTask < ApplicationRecord
   belongs_to :editor, class_name: "User", optional: true
   belongs_to :reviewer, class_name: "User", optional: true
   has_many :new_action_nodes, dependent: :destroy, inverse_of: :new_task
+  has_many :new_review_date_extension_events, dependent: :destroy
   has_many :new_task_tags, dependent: :destroy
   has_many :tags, through: :new_task_tags
   has_many :root_new_action_nodes, -> { where(parent_id: nil).order(:position) },

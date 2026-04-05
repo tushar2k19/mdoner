@@ -34,11 +34,13 @@ module MeetingDashboardSerialization
     }
   end
 
-  def serialize_meeting_new_tasks(tasks)
-    tasks.map { |task| serialize_meeting_new_task(task) }
+  def serialize_meeting_new_tasks(tasks, pack_stats_by_task_id: {})
+    tasks.map do |task|
+      serialize_meeting_new_task(task, pack_node_stats: pack_stats_by_task_id[task.id])
+    end
   end
 
-  def serialize_meeting_new_task(task)
+  def serialize_meeting_new_task(task, pack_node_stats: nil)
     base = task.as_json
     tree = task.node_tree
     calculate_display_counters(tree)
@@ -69,6 +71,12 @@ module MeetingDashboardSerialization
       "reviewer_info" => task.reviewer_info,
       "tags" => task.tags.order(:name).map { |t| { "id" => t.id, "name" => t.name } }
     )
+    base["pack_node_stats"] = pack_node_stats || {
+      "unresolved_count" => 0,
+      "resolved_count" => 0,
+      "assigned_without_comment_count" => 0,
+      "has_action_nodes" => task.new_action_nodes.any?
+    }
     base
   end
 

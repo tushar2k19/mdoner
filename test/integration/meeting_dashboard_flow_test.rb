@@ -282,6 +282,118 @@ class MeetingDashboardFlowTest < ActionDispatch::IntegrationTest
     assert_equal [], response.parsed_body["events"]
   end
 
+  test "meeting_dashboard node PUT records new_review_date_extension_event when date extends with payload" do
+    nt = NewTask.create!(
+      sector_division: "S",
+      description: "D",
+      original_date: Time.current,
+      review_date: Time.current,
+      responsibility: "R",
+      editor: @editor,
+      status: :draft
+    )
+    node = nt.new_action_nodes.create!(
+      content: "alpha",
+      level: 1,
+      list_style: "decimal",
+      node_type: "point",
+      position: 1,
+      review_date: Time.zone.parse("2026-01-15")
+    )
+
+    assert_difference -> { NewReviewDateExtensionEvent.count }, +1 do
+      put "/meeting_dashboard/tasks/#{nt.id}/nodes/#{node.id}",
+          params: {
+            action_node: { review_date: "2026-04-01" },
+            review_date_extension: { reason: "operational", explanation: "site visit moved" }
+          },
+          headers: @auth,
+          as: :json
+    end
+    assert_response :success
+
+    ev = NewReviewDateExtensionEvent.order(:id).last
+    assert_equal nt.id, ev.new_task_id
+    assert_equal node.id, ev.new_action_node_id
+    assert_equal "operational", ev.reason
+    assert_equal "site visit moved", ev.explanation
+    assert_equal Date.new(2026, 1, 15), ev.previous_review_date
+    assert_equal Date.new(2026, 4, 1), ev.new_review_date
+    assert_equal @editor.id, ev.recorded_by_id
+
+    get "/meeting_dashboard/tasks/#{nt.id}/nodes/#{node.id}/review_date_extension_events",
+        headers: @auth
+    assert_response :success
+    body = response.parsed_body
+    assert_equal 1, body["count"]
+    assert_equal 1, body["events"].length
+    assert_equal "operational", body["events"].first["reason"]
+    assert_equal "2026-01-15", body["events"].first["previous_review_date"]
+    assert_equal "2026-04-01", body["events"].first["new_review_date"]
+  end
+
+  test "meeting_dashboard node PUT invalid review_date_extension returns 422 without update" do
+    nt = NewTask.create!(
+      sector_division: "S",
+      description: "D",
+      original_date: Time.current,
+      review_date: Time.current,
+      responsibility: "R",
+      editor: @editor,
+      status: :draft
+    )
+    node = nt.new_action_nodes.create!(
+      content: "alpha",
+      level: 1,
+      list_style: "decimal",
+      node_type: "point",
+      position: 1,
+      review_date: Time.zone.parse("2026-01-15")
+    )
+
+    assert_no_difference -> { NewReviewDateExtensionEvent.count } do
+      put "/meeting_dashboard/tasks/#{nt.id}/nodes/#{node.id}",
+          params: {
+            action_node: { review_date: "2026-06-01" },
+            review_date_extension: { reason: "not_a_real_code" }
+          },
+          headers: @auth,
+          as: :json
+    end
+    assert_response :unprocessable_entity
+    assert_equal false, response.parsed_body["success"]
+    node.reload
+    assert_equal Date.new(2026, 1, 15), node.review_date.to_date
+  end
+
+  test "meeting_dashboard node PUT later review_date without extension creates no delay event" do
+    nt = NewTask.create!(
+      sector_division: "S",
+      description: "D",
+      original_date: Time.current,
+      review_date: Time.current,
+      responsibility: "R",
+      editor: @editor,
+      status: :draft
+    )
+    node = nt.new_action_nodes.create!(
+      content: "alpha",
+      level: 1,
+      list_style: "decimal",
+      node_type: "point",
+      position: 1,
+      review_date: Time.zone.parse("2026-02-01")
+    )
+
+    assert_no_difference -> { NewReviewDateExtensionEvent.count } do
+      put "/meeting_dashboard/tasks/#{nt.id}/nodes/#{node.id}",
+          params: { action_node: { review_date: "2026-08-01" } },
+          headers: @auth,
+          as: :json
+    end
+    assert_response :success
+  end
+
   test "meeting_dashboard node update rejects client temp id (negative)" do
     nt = NewTask.create!(
       sector_division: "S",
@@ -382,6 +494,8 @@ class MeetingDashboardFlowTest < ActionDispatch::IntegrationTest
     overlay = response.parsed_body
     assert_equal version_id, overlay["new_dashboard_version_id"]
     assert_equal 0, overlay["nodes"][stable]["comment_count"]
+    assert_equal [], overlay["nodes"][stable]["comment_user_ids"]
+    assert_equal [], overlay["overlay_user_directory"]
 
     post "/meeting_dashboard/assignments",
          params: {
@@ -408,7 +522,11 @@ class MeetingDashboardFlowTest < ActionDispatch::IntegrationTest
         headers: @auth,
         params: { new_dashboard_version_id: version_id }
     assert_response :success
-    assert_equal 1, response.parsed_body["nodes"][stable]["comment_count"]
+    overlay2 = response.parsed_body
+    assert_equal 1, overlay2["nodes"][stable]["comment_count"]
+    assert_equal [@editor.id], overlay2["nodes"][stable]["comment_user_ids"]
+    dir_ids = overlay2["overlay_user_directory"].map { |h| h["id"] }.sort
+    assert_equal [reviewer.id, @editor.id].sort, dir_ids
 
     get "/meeting_dashboard/comment_nodes",
         headers: @auth,
@@ -427,6 +545,75 @@ class MeetingDashboardFlowTest < ActionDispatch::IntegrationTest
     assign_id = NewDashboardAssignment.find_by!(new_dashboard_version_id: version_id, user_id: reviewer.id).id
     delete "/meeting_dashboard/assignments/#{assign_id}", headers: @auth
     assert_response :success
+  end
+
+  test "dashboard_node_comment author can PUT and DELETE own comment; others forbidden" do
+    nt = NewTask.create!(
+      sector_division: "S",
+      description: "D",
+      original_date: Time.current,
+      review_date: Time.current,
+      responsibility: "R",
+      editor: @editor,
+      status: :draft
+    )
+    node = nt.new_action_nodes.create!(
+      content: "node body",
+      level: 1,
+      list_style: "decimal",
+      node_type: "point",
+      position: 1
+    )
+    stable = node.stable_node_id
+
+    post "/meeting_dashboard/publish",
+         params: { target_meeting_date: Date.current.to_s },
+         headers: @auth,
+         as: :json
+    assert_response :success
+    version_id = response.parsed_body["new_dashboard_version_id"]
+
+    post "/meeting_dashboard/dashboard_node_comments",
+         params: {
+           new_dashboard_version_id: version_id,
+           stable_node_id: stable,
+           body: "Original"
+         },
+         headers: @auth,
+         as: :json
+    assert_response :success
+    cid = NewDashboardNodeComment.order(:id).last.id
+
+    put "/meeting_dashboard/dashboard_node_comments/#{cid}",
+        params: { body: "Revised note" },
+        headers: @auth,
+        as: :json
+    assert_response :success
+    assert_equal "Revised note", response.parsed_body.dig("comment", "body")
+
+    delete "/meeting_dashboard/dashboard_node_comments/#{cid}", headers: @auth
+    assert_response :success
+
+    post "/meeting_dashboard/dashboard_node_comments",
+         params: {
+           new_dashboard_version_id: version_id,
+           stable_node_id: stable,
+           body: "For reviewer test"
+         },
+         headers: @auth,
+         as: :json
+    assert_response :success
+    cid2 = NewDashboardNodeComment.order(:id).last.id
+
+    reviewer = build_user(role: :reviewer, first_name: "Rev", last_name: "Del")
+    post "/signin",
+         params: { email: reviewer.email, password: "Password!23" },
+         as: :json
+    assert_response :success
+    rev_auth = { "Authorization" => "Bearer #{response.parsed_body["access"]}" }
+
+    delete "/meeting_dashboard/dashboard_node_comments/#{cid2}", headers: rev_auth
+    assert_response :forbidden
   end
 
   test "reviewer can read draft_editor_overlay and comment_nodes but cannot create assignments" do
@@ -599,5 +786,199 @@ class MeetingDashboardFlowTest < ActionDispatch::IntegrationTest
     assert row_post, "task still in draft"
     assert_equal 1, row_post["tags"].length
     assert_equal tag_a.id, row_post["tags"].first["id"]
+  end
+
+  test "dashboard_pack_node resolve editor PATCH updates overlay and draft pack_node_stats" do
+    nt = NewTask.create!(
+      sector_division: "S",
+      description: "Pack stats",
+      original_date: Time.current,
+      review_date: Time.current,
+      responsibility: "R",
+      editor: @editor,
+      status: :draft
+    )
+    n1 = nt.new_action_nodes.create!(
+      content: "n1",
+      level: 1,
+      list_style: "decimal",
+      node_type: "point",
+      position: 1
+    )
+    n2 = nt.new_action_nodes.create!(
+      content: "n2",
+      level: 1,
+      list_style: "decimal",
+      node_type: "point",
+      position: 2
+    )
+    stable1 = n1.stable_node_id
+    stable2 = n2.stable_node_id
+    reviewer = build_user(role: :reviewer, first_name: "Rev", last_name: "Stats")
+
+    post "/meeting_dashboard/publish",
+         params: { target_meeting_date: Date.current.to_s },
+         headers: @auth,
+         as: :json
+    assert_response :success
+    version_id = response.parsed_body["new_dashboard_version_id"]
+
+    post "/meeting_dashboard/assignments",
+         params: {
+           new_dashboard_version_id: version_id,
+           stable_node_id: stable1,
+           user_id: reviewer.id
+         },
+         headers: @auth,
+         as: :json
+    assert_response :success
+
+    post "/meeting_dashboard/dashboard_node_comments",
+         params: {
+           new_dashboard_version_id: version_id,
+           stable_node_id: stable2,
+           body: "note"
+         },
+         headers: @auth,
+         as: :json
+    assert_response :success
+
+    get "/meeting_dashboard/draft", headers: @auth, params: { date: Date.current }
+    assert_response :success
+    row = response.parsed_body["active"].find { |t| t["id"] == nt.id }
+    stats = row["pack_node_stats"]
+    assert_equal true, stats["has_action_nodes"]
+    assert_equal 2, stats["unresolved_count"]
+    assert_equal 0, stats["resolved_count"]
+    assert_equal 1, stats["assigned_without_comment_count"]
+
+    patch "/meeting_dashboard/dashboard_pack_nodes/#{version_id}/resolve",
+          params: { stable_node_id: stable1, resolved: true },
+          headers: @auth,
+          as: :json
+    assert_response :success
+    body = response.parsed_body
+    assert_equal true, body["success"]
+    assert_equal stable1, body["stable_node_id"]
+    assert_equal true, body["resolved"]
+    assert body["resolved_at"].present?
+    assert_equal @editor.id, body["resolved_by_id"]
+
+    get "/meeting_dashboard/draft_editor_overlay",
+        headers: @auth,
+        params: { new_dashboard_version_id: version_id }
+    assert_response :success
+    node1 = response.parsed_body["nodes"][stable1]
+    assert_equal true, node1["is_resolved"]
+    assert node1["resolved_at"].present?
+    assert_equal @editor.id, node1["resolved_by"]["id"]
+    assert_equal @editor.full_name, node1["resolved_by"]["name"]
+
+    get "/meeting_dashboard/draft", headers: @auth, params: { date: Date.current }
+    row2 = response.parsed_body["active"].find { |t| t["id"] == nt.id }
+    stats2 = row2["pack_node_stats"]
+    assert_equal 1, stats2["unresolved_count"]
+    assert_equal 1, stats2["resolved_count"]
+
+    patch "/meeting_dashboard/dashboard_pack_nodes/#{version_id}/resolve",
+          params: { stable_node_id: stable1, resolved: false },
+          headers: @auth,
+          as: :json
+    assert_response :success
+    assert_equal false, response.parsed_body["resolved"]
+    assert_nil response.parsed_body["resolved_at"]
+
+    get "/meeting_dashboard/draft_editor_overlay",
+        headers: @auth,
+        params: { new_dashboard_version_id: version_id }
+    assert_equal false, response.parsed_body["nodes"][stable1]["is_resolved"]
+    assert_nil response.parsed_body["nodes"][stable1]["resolved_at"]
+    assert_nil response.parsed_body["nodes"][stable1]["resolved_by"]
+  end
+
+  test "dashboard_pack_node resolve forbidden for reviewer" do
+    nt = NewTask.create!(
+      sector_division: "S",
+      description: "D",
+      original_date: Time.current,
+      review_date: Time.current,
+      responsibility: "R",
+      editor: @editor,
+      status: :draft
+    )
+    node = nt.new_action_nodes.create!(
+      content: "body",
+      level: 1,
+      list_style: "decimal",
+      node_type: "point",
+      position: 1
+    )
+    stable = node.stable_node_id
+
+    post "/meeting_dashboard/publish",
+         params: { target_meeting_date: Date.current.to_s },
+         headers: @auth,
+         as: :json
+    assert_response :success
+    version_id = response.parsed_body["new_dashboard_version_id"]
+
+    reviewer = build_user(role: :reviewer, first_name: "Rev", last_name: "Patch")
+    post "/signin",
+         params: { email: reviewer.email, password: "Password!23" },
+         as: :json
+    assert_response :success
+    rev_auth = { "Authorization" => "Bearer #{response.parsed_body["access"]}" }
+
+    patch "/meeting_dashboard/dashboard_pack_nodes/#{version_id}/resolve",
+          params: { stable_node_id: stable, resolved: true },
+          headers: rev_auth,
+          as: :json
+    assert_response :forbidden
+  end
+
+  test "dashboard_pack_node resolve 404 unknown version" do
+    patch "/meeting_dashboard/dashboard_pack_nodes/9_999_999_999/resolve",
+          params: { stable_node_id: "nope", resolved: true },
+          headers: @auth,
+          as: :json
+    assert_response :not_found
+  end
+
+  test "dashboard_pack_node resolve 422 missing stable_node_id" do
+    nt = NewTask.create!(
+      sector_division: "S",
+      description: "D",
+      original_date: Time.current,
+      review_date: Time.current,
+      responsibility: "R",
+      editor: @editor,
+      status: :draft
+    )
+    node = nt.new_action_nodes.create!(
+      content: "body",
+      level: 1,
+      list_style: "decimal",
+      node_type: "point",
+      position: 1
+    )
+
+    post "/meeting_dashboard/publish",
+         params: { target_meeting_date: Date.current.to_s },
+         headers: @auth,
+         as: :json
+    assert_response :success
+    version_id = response.parsed_body["new_dashboard_version_id"]
+
+    patch "/meeting_dashboard/dashboard_pack_nodes/#{version_id}/resolve",
+          params: { resolved: true },
+          headers: @auth,
+          as: :json
+    assert_response :unprocessable_entity
+
+    patch "/meeting_dashboard/dashboard_pack_nodes/#{version_id}/resolve",
+          params: { stable_node_id: node.stable_node_id },
+          headers: @auth,
+          as: :json
+    assert_response :unprocessable_entity
   end
 end

@@ -2,23 +2,69 @@
 
 # Incremental updates for living draft nodes (reviewer, review_date, etc.).
 # Parallels ActionNodeController#update / #review_date_extension_events for legacy task_versions.
+#
+# == JSON API (for New Task Modal / meeting UI) — Prompt 4
+#
+# PUT /meeting_dashboard/tasks/:task_id/nodes/:id
+# Body:
+#   {
+#     "action_node": { "review_date": "...", "reviewer_id": 1, ... },
+#     "review_date_extension": { "reason": "operational", "explanation": "optional text" }   // optional
+#   }
+# - +review_date_extension+ may be omitted or null/empty: update proceeds; an audit row is created only
+#   when extension payload is present AND the stored review_date calendar day moves strictly later
+#   (same semantics as legacy try_record_review_date_extension_event!).
+# - +reason+ (required if review_date_extension is sent): one of
+#   operational, financial, weather, misc, technical, other (spaces become underscores).
+# - +explanation+ optional; max length ReviewDateExtensionCodes::MAX_EXPLANATION_LENGTH.
+# - If review_date_extension is present but invalid (e.g. bad reason): 422
+#   { "success": false, "errors": ["..."] } — no partial update.
+#
+# GET /meeting_dashboard/tasks/:task_id/nodes/:id/review_date_extension_events
+# Response: { "success": true, "count": N, "events": [ { id, previous_review_date, new_review_date,
+#   reason, explanation, recorded_at, recorded_by: { id, full_name } } ] }
+# Dates in events are ISO8601 date strings.
+#
+# == Non-goal
+# Bulk task save via MeetingDashboard::TasksController#sync_nodes can change node review_date without
+# per-node delay payloads; no NewReviewDateExtensionEvent rows are written on that path until API extends.
+#
+# Authorization: same as before this feature — JWT + meeting_dashboard enabled; no extra editor gate here.
 class MeetingDashboard::TaskNodesController < ApplicationController
   before_action :require_meeting_dashboard!
   before_action :set_new_task
   before_action :set_new_action_node
 
-  # GET /meeting_dashboard/tasks/:task_id/nodes/:id/review_date_extension_events
-  # Legacy uses ReviewDateExtensionEvent (tasks/task_versions/action_nodes). New flow has no row yet —
-  # return an empty list so the UI does not error; delay attribution for new_* can be added later.
   def review_date_extension_events
-    render json: { success: true, count: 0, events: [] }
+    events = NewReviewDateExtensionEvent
+      .includes(:recorded_by)
+      .where(new_action_node_id: @node.id)
+      .order(created_at: :desc)
+      .to_a
+
+    render json: {
+      success: true,
+      count: events.length,
+      events: events.map { |e| serialize_new_review_date_extension_event(e) }
+    }
   end
 
-  # PUT /meeting_dashboard/tasks/:task_id/nodes/:id
-  # Body: { action_node: { review_date, reviewer_id, ... } } — same envelope as legacy ActionNodeController
   def update
+    extension_parse = parse_review_date_extension_params
+    if extension_parse[:error]
+      return render json: {
+        success: false,
+        errors: [extension_parse[:error]]
+      }, status: :unprocessable_entity
+    end
+
+    old_review_date = @node.review_date
+
     if @node.update(node_params)
-      @new_task.update_review_date_from_nodes if @node.saved_change_to_review_date?
+      if @node.saved_change_to_review_date?
+        @new_task.update_review_date_from_nodes
+        try_record_new_review_date_extension_event!(old_review_date, extension_parse[:payload])
+      end
       render json: {
         success: true,
         data: serialize_meeting_node(@node.reload)
@@ -64,6 +110,73 @@ class MeetingDashboard::TaskNodesController < ApplicationController
     params.require(:action_node).permit(
       :content, :level, :list_style, :node_type, :parent_id,
       :review_date, :completed, :position, :reviewer_id
+    )
+  end
+
+  # Optional: { reason: 'operational', explanation: '...' } — only stored when review date moves later.
+  def parse_review_date_extension_params
+    raw = params[:review_date_extension]
+    return { payload: nil } if raw.blank?
+
+    permitted = raw.permit(:reason, :explanation).to_h
+    reason = permitted["reason"].to_s.strip
+    explanation = permitted["explanation"].to_s
+
+    if reason.blank?
+      return { error: "reason is required when review_date_extension is sent" }
+    end
+
+    code = reason.downcase.tr(" ", "_")
+    unless ReviewDateExtensionCodes::REASON_CODES.include?(code)
+      return { error: "invalid reason (allowed: #{ReviewDateExtensionCodes::REASON_CODES.join(', ')})" }
+    end
+
+    {
+      payload: {
+        reason: code,
+        explanation: explanation.truncate(ReviewDateExtensionCodes::MAX_EXPLANATION_LENGTH)
+      }
+    }
+  end
+
+  def serialize_new_review_date_extension_event(event)
+    {
+      id: event.id,
+      previous_review_date: event.previous_review_date&.iso8601,
+      new_review_date: event.new_review_date&.iso8601,
+      reason: event.reason,
+      explanation: event.explanation,
+      recorded_at: event.created_at.iso8601,
+      recorded_by: {
+        id: event.recorded_by_id,
+        full_name: event.recorded_by&.full_name
+      }
+    }
+  end
+
+  def try_record_new_review_date_extension_event!(old_review_date, extension_payload)
+    return if extension_payload.blank?
+
+    old_d = old_review_date&.to_date
+    new_d = @node.review_date&.to_date
+    return unless old_d && new_d && new_d > old_d
+
+    event = NewReviewDateExtensionEvent.new(
+      new_task: @new_task,
+      new_action_node: @node,
+      stable_node_id: @node.stable_node_id,
+      previous_review_date: old_d,
+      new_review_date: new_d,
+      reason: extension_payload[:reason],
+      explanation: extension_payload[:explanation].presence,
+      recorded_by: current_user
+    )
+
+    return if event.save
+
+    Rails.logger.warn(
+      "[NewReviewDateExtensionEvent] skipped: #{event.errors.full_messages.join(', ')} " \
+      "(new_action_node_id=#{@node.id})"
     )
   end
 

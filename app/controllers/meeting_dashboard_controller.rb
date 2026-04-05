@@ -11,12 +11,14 @@ class MeetingDashboardController < ApplicationController
   before_action :require_editor!, only: %i[
     publish reset_draft update_draft_settings
     create_assignment destroy_assignment reschedule
+    resolve_dashboard_pack_node
   ]
   # Overlay + comment index are read-only metadata for published packs; editors and reviewers need
   # them on Final (NewFinalDashboard). Mutations stay editor-only above.
   before_action :require_comment_participant!, only: %i[
     draft_editor_overlay comment_nodes
     dashboard_node_comments create_dashboard_node_comment
+    update_dashboard_node_comment destroy_dashboard_node_comment
   ]
 
   # GET /meeting_dashboard/draft
@@ -37,10 +39,12 @@ class MeetingDashboardController < ApplicationController
                      end
 
     settings = NewDashboardDraftSetting.global
+    all_for_stats = active_tasks.to_a + completed_tasks.to_a
+    pack_stats_by_task_id = MeetingDashboard::PackNodeStats.for_tasks(version: latest, tasks: all_for_stats)
 
     render json: {
-      active: serialize_meeting_new_tasks(active_tasks),
-      completed: serialize_meeting_new_tasks(completed_tasks),
+      active: serialize_meeting_new_tasks(active_tasks, pack_stats_by_task_id: pack_stats_by_task_id),
+      completed: serialize_meeting_new_tasks(completed_tasks, pack_stats_by_task_id: pack_stats_by_task_id),
       latest_published: latest_payload,
       draft_settings: {
         target_meeting_date: settings.target_meeting_date
@@ -219,6 +223,35 @@ class MeetingDashboardController < ApplicationController
     render json: { error: e.message }, status: :unprocessable_entity
   end
 
+  # PUT /meeting_dashboard/dashboard_node_comments/:id  params: { body: "..." }
+  def update_dashboard_node_comment
+    c = NewDashboardNodeComment.find(params.require(:id))
+    unless c.user_id == current_user.id
+      render json: { error: "Forbidden" }, status: :forbidden
+      return
+    end
+
+    body = params.require(:body).to_s.strip
+    raise ArgumentError, "body is blank" if body.blank?
+
+    c.update!(body: body)
+    render json: { success: true, comment: serialize_dashboard_node_comment(c) }
+  rescue ArgumentError => e
+    render json: { error: e.message }, status: :unprocessable_entity
+  end
+
+  # DELETE /meeting_dashboard/dashboard_node_comments/:id
+  def destroy_dashboard_node_comment
+    c = NewDashboardNodeComment.find(params.require(:id))
+    unless c.user_id == current_user.id
+      render json: { error: "Forbidden" }, status: :forbidden
+      return
+    end
+
+    c.destroy!
+    render json: { success: true }
+  end
+
   # POST /meeting_dashboard/assignments
   # params: new_dashboard_version_id, stable_node_id, user_id
   def create_assignment
@@ -246,6 +279,43 @@ class MeetingDashboardController < ApplicationController
     a = NewDashboardAssignment.find(params.require(:id))
     a.destroy!
     render json: { success: true }
+  end
+
+  # PATCH /meeting_dashboard/dashboard_pack_nodes/:new_dashboard_version_id/resolve
+  # JSON body: { "stable_node_id": "...", "resolved": true|false }
+  def resolve_dashboard_pack_node
+    version = NewDashboardVersion.find(params[:new_dashboard_version_id])
+    stable_node_id = params[:stable_node_id].presence
+    if stable_node_id.blank?
+      render json: { error: "stable_node_id required" }, status: :unprocessable_entity
+      return
+    end
+    unless params.key?(:resolved)
+      render json: { error: "resolved required" }, status: :unprocessable_entity
+      return
+    end
+
+    resolved_flag = ActiveModel::Type::Boolean.new.cast(params[:resolved])
+    snap = find_snapshot_node!(version, stable_node_id)
+
+    rec = NewDashboardPackNodeResolution.find_or_initialize_by(
+      new_dashboard_version: version,
+      new_dashboard_snapshot_action_node: snap
+    )
+    if resolved_flag
+      rec.assign_attributes(resolved: true, resolved_at: Time.current, resolved_by: current_user)
+    else
+      rec.assign_attributes(resolved: false, resolved_at: nil, resolved_by_id: nil)
+    end
+    rec.save!
+
+    render json: {
+      success: true,
+      stable_node_id: snap.stable_node_id.to_s,
+      resolved: rec.resolved,
+      resolved_at: rec.resolved_at&.iso8601,
+      resolved_by_id: rec.resolved_by_id
+    }
   end
 
   # POST /meeting_dashboard/reschedule

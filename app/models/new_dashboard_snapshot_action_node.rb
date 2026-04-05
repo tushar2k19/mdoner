@@ -14,6 +14,7 @@ class NewDashboardSnapshotActionNode < ApplicationRecord
                                                  foreign_key: :parent_id, dependent: :destroy, inverse_of: :parent
   has_many :new_dashboard_assignments, dependent: :destroy
   has_many :new_dashboard_node_comments, dependent: :destroy
+  has_one :new_dashboard_pack_node_resolution, dependent: :destroy
 
   validates :node_type, :list_style, :level, :content, :position, presence: true
 

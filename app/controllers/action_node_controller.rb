@@ -265,14 +265,14 @@ class ActionNodeController < ApplicationController
     end
 
     code = reason.downcase.tr(' ', '_')
-    unless ReviewDateExtensionEvent::REASON_CODES.include?(code)
-      return { error: "invalid reason (allowed: #{ReviewDateExtensionEvent::REASON_CODES.join(', ')})" }
+    unless ReviewDateExtensionCodes::REASON_CODES.include?(code)
+      return { error: "invalid reason (allowed: #{ReviewDateExtensionCodes::REASON_CODES.join(', ')})" }
     end
 
     {
       payload: {
         reason: code,
-        explanation: explanation.truncate(ReviewDateExtensionEvent::MAX_EXPLANATION_LENGTH)
+        explanation: explanation.truncate(ReviewDateExtensionCodes::MAX_EXPLANATION_LENGTH)
       }
     }
   end

@@ -10,6 +10,7 @@ class NewDashboardVersion < ApplicationRecord
                                    inverse_of: :current_new_dashboard_version
   has_many :new_dashboard_assignments, dependent: :destroy
   has_many :new_dashboard_node_comments, dependent: :destroy
+  has_many :new_dashboard_pack_node_resolutions, dependent: :destroy
 
   validates :target_meeting_date, :published_at, presence: true
 end

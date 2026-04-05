@@ -10,6 +10,7 @@ class NewActionNode < ApplicationRecord
   belongs_to :reviewer, class_name: "User", optional: true
   has_many :children, -> { order(:position) }, class_name: "NewActionNode", foreign_key: :parent_id,
                                                  dependent: :destroy, inverse_of: :parent
+  has_many :new_review_date_extension_events, dependent: :nullify
 
   validates :node_type, presence: true,
                         inclusion: { in: %w[paragraph point subpoint subsubpoint table rich_text] }

@@ -63,8 +63,11 @@ Rails.application.routes.draw do
     get 'comment_nodes', action: :comment_nodes
     get 'dashboard_node_comments', action: :dashboard_node_comments
     post 'dashboard_node_comments', action: :create_dashboard_node_comment
+    put 'dashboard_node_comments/:id', action: :update_dashboard_node_comment
+    delete 'dashboard_node_comments/:id', action: :destroy_dashboard_node_comment
     post 'assignments', action: :create_assignment
     delete 'assignments/:id', action: :destroy_assignment
+    patch 'dashboard_pack_nodes/:new_dashboard_version_id/resolve', action: :resolve_dashboard_pack_node
     post 'reschedule', action: :reschedule
   end
 

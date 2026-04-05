@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_04_04_190000) do
+ActiveRecord::Schema[7.1].define(version: 2026_04_05_121500) do
   create_table "action_nodes", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.bigint "task_version_id", null: false
     t.bigint "parent_id"
@@ -119,6 +119,22 @@ ActiveRecord::Schema[7.1].define(version: 2026_04_04_190000) do
     t.index ["user_id"], name: "index_new_dashboard_node_comments_on_user_id"
   end
 
+  create_table "new_dashboard_pack_node_resolutions", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
+    t.bigint "new_dashboard_version_id", null: false
+    t.bigint "new_dashboard_snapshot_action_node_id", null: false
+    t.boolean "resolved", default: false, null: false
+    t.datetime "resolved_at"
+    t.bigint "resolved_by_id"
+    t.datetime "deleted_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["deleted_at"], name: "index_new_dashboard_pack_node_resolutions_on_deleted_at"
+    t.index ["new_dashboard_snapshot_action_node_id"], name: "idx_on_new_dashboard_snapshot_action_node_id_7c0afe18cc"
+    t.index ["new_dashboard_version_id", "new_dashboard_snapshot_action_node_id"], name: "idx_pack_resolutions_version_and_snapshot_node", unique: true
+    t.index ["new_dashboard_version_id"], name: "idx_on_new_dashboard_version_id_3a33701195"
+    t.index ["resolved_by_id"], name: "index_new_dashboard_pack_node_resolutions_on_resolved_by_id"
+  end
+
   create_table "new_dashboard_snapshot_action_nodes", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.bigint "new_dashboard_version_id", null: false
     t.bigint "new_dashboard_snapshot_task_id", null: false
@@ -214,6 +230,27 @@ ActiveRecord::Schema[7.1].define(version: 2026_04_04_190000) do
     t.index ["deleted_at"], name: "index_new_meeting_schedules_on_deleted_at"
     t.index ["meeting_date"], name: "index_new_meeting_schedules_on_meeting_date"
     t.index ["set_by_user_id"], name: "index_new_meeting_schedules_on_set_by_user_id"
+  end
+
+  create_table "new_review_date_extension_events", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
+    t.bigint "new_task_id", null: false
+    t.bigint "new_action_node_id"
+    t.string "stable_node_id"
+    t.date "previous_review_date", null: false
+    t.date "new_review_date", null: false
+    t.string "reason", limit: 32, null: false
+    t.text "explanation"
+    t.bigint "recorded_by_id", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["new_action_node_id", "created_at"], name: "index_nrdee_on_new_action_node_id_and_created_at"
+    t.index ["new_action_node_id"], name: "index_new_review_date_extension_events_on_new_action_node_id"
+    t.index ["new_task_id", "created_at"], name: "index_nrdee_on_new_task_id_and_created_at"
+    t.index ["new_task_id", "reason"], name: "index_nrdee_on_new_task_id_and_reason"
+    t.index ["new_task_id"], name: "index_new_review_date_extension_events_on_new_task_id"
+    t.index ["reason"], name: "index_nrdee_on_reason"
+    t.index ["recorded_by_id"], name: "index_new_review_date_extension_events_on_recorded_by_id"
+    t.index ["stable_node_id"], name: "index_nrdee_on_stable_node_id"
   end
 
   create_table "new_task_tags", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
@@ -390,6 +427,9 @@ ActiveRecord::Schema[7.1].define(version: 2026_04_04_190000) do
   add_foreign_key "new_dashboard_node_comments", "new_dashboard_snapshot_action_nodes"
   add_foreign_key "new_dashboard_node_comments", "new_dashboard_versions"
   add_foreign_key "new_dashboard_node_comments", "users"
+  add_foreign_key "new_dashboard_pack_node_resolutions", "new_dashboard_snapshot_action_nodes"
+  add_foreign_key "new_dashboard_pack_node_resolutions", "new_dashboard_versions"
+  add_foreign_key "new_dashboard_pack_node_resolutions", "users", column: "resolved_by_id"
   add_foreign_key "new_dashboard_snapshot_action_nodes", "new_action_nodes", column: "source_new_action_node_id", on_delete: :nullify
   add_foreign_key "new_dashboard_snapshot_action_nodes", "new_dashboard_snapshot_action_nodes", column: "parent_id"
   add_foreign_key "new_dashboard_snapshot_action_nodes", "new_dashboard_snapshot_tasks"
@@ -405,6 +445,9 @@ ActiveRecord::Schema[7.1].define(version: 2026_04_04_190000) do
   add_foreign_key "new_meeting_schedule_events", "users", column: "actor_id"
   add_foreign_key "new_meeting_schedules", "new_dashboard_versions", column: "current_new_dashboard_version_id"
   add_foreign_key "new_meeting_schedules", "users", column: "set_by_user_id"
+  add_foreign_key "new_review_date_extension_events", "new_action_nodes", on_delete: :nullify
+  add_foreign_key "new_review_date_extension_events", "new_tasks"
+  add_foreign_key "new_review_date_extension_events", "users", column: "recorded_by_id"
   add_foreign_key "new_task_tags", "new_tasks"
   add_foreign_key "new_task_tags", "tags"
   add_foreign_key "new_task_tags", "users", column: "created_by_id"
