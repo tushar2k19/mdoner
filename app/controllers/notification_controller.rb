@@ -1,6 +1,27 @@
 class NotificationController < ApplicationController
-  # before_action :authorize_access_request!
+  include ActionController::Live
 
+  before_action :authenticate_stream, only: [:stream]
+  before_action :authorize_access_request!, except: [:stream]
+
+  def stream
+    response.headers["Content-Type"] = "text/event-stream"
+    response.headers["Cache-Control"] = "no-cache"
+    response.headers["X-Accel-Buffering"] = "no"
+    response.headers["Connection"] = "keep-alive"
+    # Helps Rack::ETag / some proxies avoid buffering the whole body (Rails Live doc).
+    response.headers["Last-Modified"] = Time.now.httpdate
+
+    channel = RedisPubSubChannel.namespaced_channel("notifications_stream_#{current_user.id}")
+    Sse::RedisStream.new(
+      response: response,
+      channel: channel,
+      user_id: current_user.id,
+      kind: "legacy_notifications"
+    ).run
+  rescue IOError, ActionController::Live::ClientDisconnected
+    # Client closed the connection. Stream helper handles full cleanup.
+  end
   def index
     notifications = current_user.notifications
                                 .includes(:task)
@@ -29,6 +50,13 @@ class NotificationController < ApplicationController
   end
 
   private
+
+  def authenticate_stream
+    if params[:token].present?
+      request.headers['Authorization'] = "Bearer #{params[:token]}"
+    end
+    authorize_access_request!
+  end
 
   def get_redirect_info(notification)
     # Partial approval: multiple reviews per version — send editor to the hub, not the

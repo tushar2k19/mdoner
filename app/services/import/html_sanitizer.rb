@@ -5,13 +5,15 @@ module Import
     # Keep this list small and purpose-built for dashboards.
     ALLOWED_TAGS = %w[
       b strong i em u br p div span font
-      table thead tbody tr td th
+      table thead tbody tr td th colgroup col
       sup sub
     ].freeze
 
     # Allow minimal attributes; table layout relies on inline styles.
     ALLOWED_ATTRS_BY_TAG = {
-      'table' => %w[class style dir width cellpadding cellspacing],
+      'table' => %w[class style dir width cellpadding cellspacing border],
+      'colgroup' => %w[style span width],
+      'col' => %w[style span width align valign],
       'thead' => %w[style],
       'tbody' => %w[style],
       'tr' => %w[style valign],

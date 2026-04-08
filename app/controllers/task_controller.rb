@@ -1,6 +1,7 @@
 class TaskController < ApplicationController
   include ActionNodePersister
   include NodeTreeSerializer
+  include MeetingDashboardSerialization
 
   # before_action :authorize_access_request!
   before_action :set_task, only: [
@@ -89,6 +90,39 @@ class TaskController < ApplicationController
     render json: {
       active: serialize_tasks_with_versions(sorted_active_tasks),
       completed: serialize_tasks_with_versions(completed_tasks)
+    }
+  end
+
+  def daily_dashboard
+    start_date = if params[:start].present?
+                   Time.zone.parse(params[:start]).to_date
+                 elsif params[:date].present?
+                   Time.zone.parse(params[:date]).to_date
+                 else
+                   Time.zone.today
+                 end
+    end_date = if params[:end].present?
+                 Time.zone.parse(params[:end]).to_date
+               else
+                 start_date
+               end
+
+
+    # Only new-flow tasks (NewTask + new_action_nodes) — daily dashboard is feature-flag-aware.
+    # No role-based scoping: both editors and reviewers see all tasks hassle-free.
+    tasks = NewTask.joins(:new_action_nodes)
+                   .includes(:editor, :tags, new_action_nodes: :reviewer)
+                   .where.not(status: :completed)
+                   .where(
+                     'new_action_nodes.review_date >= ? AND new_action_nodes.review_date <= ?',
+                     start_date,
+                     end_date
+                   )
+                   .distinct
+
+    # Future pagination support via page/pageSize parameters could be implemented here
+    render json: {
+      tasks: serialize_meeting_new_tasks(tasks)
     }
   end
 
@@ -1037,12 +1071,12 @@ class TaskController < ApplicationController
 
   def notify_task_approval(review)
     # Notify editor about approval
-    Notification.create(
-      recipient: review.task_version.editor,
-      task: @task,
-      review: review,
-      message: "Your task '#{@task.description}' has been approved",
-      notification_type: :task_approved
+    NotificationDispatcher.new.deliver(
+      review.task_version.editor.id,
+      :task_approved,
+      "Your task '#{@task.description}' has been approved",
+      task_id: @task.id,
+      review_id: review.id
     )
   end
 
@@ -1095,11 +1129,12 @@ class TaskController < ApplicationController
     all_reviewers = @task.versions.joins(:reviews).pluck('reviews.reviewer_id').uniq.map { |id| User.find(id) }
     
     [@task.editor].concat(all_reviewers).uniq.each do |user|
-      Notification.create(
-        recipient: user,
-        task: @task,
-        message: "Task '#{@task.description}' has been approved",
-        notification_type: :task_approved
+      NotificationDispatcher.new.deliver(
+        user.id,
+        :task_approved,
+        "Task '#{@task.description}' has been approved",
+        task_id: @task.id,
+        review_id: nil
       )
     end
   end
@@ -1109,11 +1144,12 @@ class TaskController < ApplicationController
     all_reviewers = @task.versions.joins(:reviews).pluck('reviews.reviewer_id').uniq.map { |id| User.find(id) }
     
     [@task.editor].concat(all_reviewers).uniq.each do |user|
-      Notification.create(
-        recipient: user,
-        task: @task,
-        message: "Task '#{@task.description}' has been marked as completed",
-        notification_type: :task_completed
+      NotificationDispatcher.new.deliver(
+        user.id,
+        :task_completed,
+        "Task '#{@task.description}' has been marked as completed",
+        task_id: @task.id,
+        review_id: nil
       )
     end
   end
@@ -1123,11 +1159,12 @@ class TaskController < ApplicationController
     all_reviewers = @task.versions.joins(:reviews).pluck('reviews.reviewer_id').uniq.map { |id| User.find(id) }
     
     [@task.editor].concat(all_reviewers).uniq.each do |user|
-      Notification.create(
-        recipient: user,
-        task: @task,
-        message: "Task '#{@task.description}' has been marked as incomplete and needs review",
-        notification_type: :task_approved
+      NotificationDispatcher.new.deliver(
+        user.id,
+        :task_approved,
+        "Task '#{@task.description}' has been marked as incomplete and needs review",
+        task_id: @task.id,
+        review_id: nil
       )
     end
   end
@@ -1709,12 +1746,12 @@ class TaskController < ApplicationController
       next unless changed_nodes.any? # Only notify if there are actual changes
       
       # Create targeted notification
-      Notification.create!(
-        recipient: review.reviewer,
-        task: @task,
-        review: review,
-        message: generate_smart_notification_message(changed_nodes, review),
-        notification_type: 'review_request'
+      NotificationDispatcher.new.deliver(
+        review.reviewer.id,
+        'review_request',
+        generate_smart_notification_message(changed_nodes, review),
+        task_id: @task.id,
+        review_id: review.id
       )
     end
   end

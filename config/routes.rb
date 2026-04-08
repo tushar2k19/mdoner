@@ -19,6 +19,7 @@ Rails.application.routes.draw do
 
   controller :task do
     get 'tasks' => 'task#index'
+    get 'tasks/daily_dashboard' => 'task#daily_dashboard'
     get 'tasks/review_delay_analytics' => 'task#review_delay_analytics'
     post 'task' => 'task#create'
     put 'task/:id' => 'task#update'
@@ -39,6 +40,9 @@ Rails.application.routes.draw do
   namespace :imports do
     post 'dashboard_html/preview' => 'dashboard_html#preview'
     post 'dashboard_html/approve' => 'dashboard_html#approve'
+    get 'dashboard_html/existing_candidates' => 'dashboard_html#existing_candidates'
+    get 'dashboard_html/existing_task/:id' => 'dashboard_html#existing_task'
+    delete 'dashboard_html/existing_task/:id' => 'dashboard_html#delete_existing_task'
   end
 
   namespace :meeting_dashboard do
@@ -60,6 +64,7 @@ Rails.application.routes.draw do
     post 'publish', action: :publish
     post 'reset_draft', action: :reset_draft
     get 'draft_editor_overlay', action: :draft_editor_overlay
+    get 'pack_node_status_explain', action: :pack_node_status_explain
     get 'comment_nodes', action: :comment_nodes
     get 'dashboard_node_comments', action: :dashboard_node_comments
     post 'dashboard_node_comments', action: :create_dashboard_node_comment
@@ -67,6 +72,7 @@ Rails.application.routes.draw do
     delete 'dashboard_node_comments/:id', action: :destroy_dashboard_node_comment
     post 'assignments', action: :create_assignment
     delete 'assignments/:id', action: :destroy_assignment
+    post 'hub_reminder', action: :hub_reminder
     patch 'dashboard_pack_nodes/:new_dashboard_version_id/resolve', action: :resolve_dashboard_pack_node
     post 'reschedule', action: :reschedule
   end
@@ -86,9 +92,17 @@ Rails.application.routes.draw do
   end
 
   controller :notification do
+    get 'notifications/stream' => 'notification#stream'
     get 'notifications' => 'notification#index'
     put 'notification/:id/mark_as_read' => 'notification#mark_as_read'
     put 'notifications/mark_all_as_read' => 'notification#mark_all_as_read'
+  end
+
+  controller :meeting_pack_notifications do
+    get 'meeting_pack_notifications/stream' => 'meeting_pack_notifications#stream'
+    get 'meeting_pack_notifications' => 'meeting_pack_notifications#index'
+    put 'meeting_pack_notifications/:id/read' => 'meeting_pack_notifications#mark_read'
+    put 'meeting_pack_notifications/read_all' => 'meeting_pack_notifications#mark_all_read'
   end
 
   controller :user do

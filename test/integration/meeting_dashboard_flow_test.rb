@@ -90,6 +90,57 @@ class MeetingDashboardFlowTest < ActionDispatch::IntegrationTest
     assert_equal 1, nt.new_action_nodes.count
   end
 
+  test "import approve with replace_existing_new_task_id soft-deletes old task and creates new one" do
+    old_task = NewTask.create!(
+      sector_division: "IFD",
+      description: "Existing",
+      original_date: Time.current,
+      review_date: Time.current,
+      responsibility: "R",
+      editor: @editor,
+      status: :draft
+    )
+    old_task.new_action_nodes.create!(
+      content: "<p>old</p>",
+      level: 1,
+      list_style: "decimal",
+      node_type: "rich_text",
+      position: 1
+    )
+
+    payload = {
+      task: { sn: 11, sector_division: "IFD", description: "Existing", responsibility: "R" },
+      replace_existing_new_task_id: old_task.id,
+      nodes: [
+        {
+          "id" => "n1",
+          "parent_id" => nil,
+          "content" => "<p>new-content</p>",
+          "level" => 1,
+          "list_style" => "decimal",
+          "node_type" => "rich_text",
+          "position" => 1
+        }
+      ]
+    }
+
+    post "/imports/dashboard_html/approve",
+         params: payload,
+         headers: @auth,
+         as: :json
+    assert_response :success, -> { response.body }
+    body = response.parsed_body
+    assert_equal old_task.id, body["deleted_replaced_task_id"]
+    refute_equal old_task.id, body["task_id"]
+
+    assert_nil NewTask.find_by(id: old_task.id)
+    assert NewTask.with_deleted.find(old_task.id).deleted_at.present?
+
+    created = NewTask.find(body["task_id"])
+    assert_equal "IFD", created.sector_division
+    assert_equal "<p>new-content</p>", created.new_action_nodes.order(:position).first.content
+  end
+
   test "publish then published returns snapshot tasks" do
     nt = NewTask.create!(
       sector_division: "S",
@@ -457,6 +508,62 @@ class MeetingDashboardFlowTest < ActionDispatch::IntegrationTest
     assert_equal tag.name, row["tags"].first["name"]
   end
 
+  test "published snapshot serializes tags from published_tag_ids" do
+    nt = NewTask.create!(
+      sector_division: "S",
+      description: "D",
+      original_date: Time.current,
+      review_date: Time.current,
+      responsibility: "R",
+      editor: @editor,
+      status: :draft
+    )
+    nt.new_action_nodes.create!(
+      content: "body",
+      level: 1,
+      list_style: "decimal",
+      node_type: "point",
+      position: 1
+    )
+    tag = Tag.create!(name: "PublishedSnapTag-#{SecureRandom.hex(4)}")
+
+    put "/meeting_dashboard/tasks/#{nt.id}",
+        params: {
+          task: {
+            sector_division: nt.sector_division,
+            description: nt.description,
+            responsibility: nt.responsibility,
+            original_date: nt.original_date.to_date,
+            review_date: nt.review_date.to_date,
+            tag_ids: [tag.id]
+          }
+        },
+        headers: @auth,
+        as: :json
+    assert_response :success
+
+    meeting_day = Date.current
+    post "/meeting_dashboard/publish",
+         params: { target_meeting_date: meeting_day.to_s },
+         headers: @auth,
+         as: :json
+    assert_response :success
+    version_id = response.parsed_body["new_dashboard_version_id"]
+
+    get "/meeting_dashboard/published",
+        headers: @auth,
+        params: { new_dashboard_version_id: version_id }
+    assert_response :success
+    body = response.parsed_body
+    assert_equal false, body["empty"]
+    assert_equal 1, body["tasks"].length
+    pub_row = body["tasks"].first
+    assert pub_row["tags"].is_a?(Array)
+    assert_equal 1, pub_row["tags"].length
+    assert_equal tag.id, pub_row["tags"].first["id"]
+    assert_equal tag.name, pub_row["tags"].first["name"]
+  end
+
   test "draft_editor_overlay comment_nodes assignment and comments after publish" do
     nt = NewTask.create!(
       sector_division: "S",
@@ -708,9 +815,12 @@ class MeetingDashboardFlowTest < ActionDispatch::IntegrationTest
 
     get "/meeting_dashboard/meeting_dates", headers: @auth
     assert_response :success
-    dates = response.parsed_body["meeting_dates"].map { |r| Date.parse(r["meeting_date"].to_s) }
+    payload = response.parsed_body["meeting_dates"]
+    dates = payload.map { |r| Date.parse(r["meeting_date"].to_s) }
     assert_includes dates, d_to
     refute_includes dates, d_from
+    assert(payload.all? { |r| r.key?("published_at") && r["published_at"].present? },
+           "meeting_dates should include published_at for default snapshot selection")
   end
 
   test "reset_draft restores new_task tags to last published snapshot" do
@@ -980,5 +1090,96 @@ class MeetingDashboardFlowTest < ActionDispatch::IntegrationTest
           headers: @auth,
           as: :json
     assert_response :unprocessable_entity
+  end
+
+  test "meeting task update normalizes complex pasted table content" do
+    nt = NewTask.create!(
+      sector_division: "S",
+      description: "D",
+      original_date: Time.current,
+      review_date: Time.current,
+      responsibility: "R",
+      editor: @editor,
+      status: :draft
+    )
+    existing = nt.new_action_nodes.create!(
+      content: "<p>old</p>",
+      level: 1,
+      list_style: "decimal",
+      node_type: "rich_text",
+      position: 1
+    )
+
+    raw_html = <<~HTML
+      <table>
+        <tr><td rowspan="2">Scheme</td><td colspan="2">Week</td></tr>
+        <tr></tr>
+        <tr><td>Tar</td><td>Exp.</td></tr>
+      </table>
+    HTML
+
+    put "/meeting_dashboard/tasks/#{nt.id}",
+        params: {
+          task: { sector_division: "S", description: "D", responsibility: "R", status: "draft" },
+          action_nodes: [
+            {
+              "id" => existing.id,
+              "stable_node_id" => existing.stable_node_id,
+              "parent_id" => nil,
+              "content" => raw_html,
+              "level" => 1,
+              "list_style" => "decimal",
+              "node_type" => "rich_text",
+              "position" => 1
+            }
+          ]
+        },
+        headers: @auth,
+        as: :json
+    assert_response :success, -> { response.body }
+
+    saved = nt.new_action_nodes.find(existing.id).content
+    assert_includes saved, "dashboard-import-table"
+    assert_includes saved, "overflow-x: auto"
+    refute_match(/<tr>\s*<\/tr>/, saved)
+  end
+
+  test "meeting node update normalizes complex table content" do
+    nt = NewTask.create!(
+      sector_division: "S",
+      description: "D",
+      original_date: Time.current,
+      review_date: Time.current,
+      responsibility: "R",
+      editor: @editor,
+      status: :draft
+    )
+    node = nt.new_action_nodes.create!(
+      content: "<p>alpha</p>",
+      level: 1,
+      list_style: "decimal",
+      node_type: "rich_text",
+      position: 1
+    )
+
+    raw_html = <<~HTML
+      <table>
+        <tr><td rowspan="3">Scheme</td><td>Week</td></tr>
+        <tr></tr>
+        <tr></tr>
+        <tr><td>Tar</td></tr>
+      </table>
+    HTML
+
+    put "/meeting_dashboard/tasks/#{nt.id}/nodes/#{node.id}",
+        params: { action_node: { content: raw_html } },
+        headers: @auth,
+        as: :json
+    assert_response :success, -> { response.body }
+
+    saved = nt.new_action_nodes.find(node.id).content
+    assert_includes saved, "dashboard-import-table"
+    assert_includes saved, "overflow-x: auto"
+    refute_match(/<tr>\s*<\/tr>/, saved)
   end
 end

@@ -39,6 +39,43 @@ class DashboardHtmlParserTest < ActiveSupport::TestCase
     assert_includes joined, 'class="resizable-table"'
   end
 
+  test 'parses SI header and ordered-list serial numbers' do
+    html = <<~HTML
+      <html><body>
+        <table>
+          <tr>
+            <td>SI</td>
+            <td>Sector / Division</td>
+            <td>Description</td>
+            <td>Action to be Taken</td>
+            <td>Responsibility</td>
+          </tr>
+          <tr>
+            <td><ol><li></li></ol></td>
+            <td>IFD</td>
+            <td>First</td>
+            <td><ol><li>One</li></ol></td>
+            <td>All JS</td>
+          </tr>
+          <tr>
+            <td><ol start="2"><li></li></ol></td>
+            <td>ADM</td>
+            <td>Second</td>
+            <td><ol><li>Two</li></ol></td>
+            <td>Admin</td>
+          </tr>
+        </table>
+      </body></html>
+    HTML
+
+    tasks = Import::DashboardHtmlParser.parse(html)
+    assert_equal 2, tasks.size
+    assert_equal 1, tasks.first[:sn]
+    assert_equal 2, tasks.second[:sn]
+    assert_equal 'IFD', tasks.first[:sector_division]
+    assert_equal 'ADM', tasks.second[:sector_division]
+  end
+
   test 'approve endpoint creates task, version, and nodes' do
     editor = build_user(role: :editor, first_name: "Import", last_name: "Editor")
 

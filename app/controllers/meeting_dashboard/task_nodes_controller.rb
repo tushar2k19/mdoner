@@ -107,10 +107,15 @@ class MeetingDashboard::TaskNodesController < ApplicationController
   end
 
   def node_params
-    params.require(:action_node).permit(
+    attrs = params.require(:action_node).permit(
       :content, :level, :list_style, :node_type, :parent_id,
       :review_date, :completed, :position, :reviewer_id
     )
+    if attrs.key?(:content)
+      raw = attrs[:content].to_s
+      attrs[:content] = normalize_complex_table_content(raw)
+    end
+    attrs
   end
 
   # Optional: { reason: 'operational', explanation: '...' } — only stored when review date moves later.
@@ -202,5 +207,11 @@ class MeetingDashboard::TaskNodesController < ApplicationController
       created_at: node.created_at,
       updated_at: node.updated_at
     }
+  end
+
+  def normalize_complex_table_content(content)
+    return content unless content.include?('<table')
+
+    Import::HtmlTableToResizableTable.normalize_complex_tables_in_html(content)
   end
 end

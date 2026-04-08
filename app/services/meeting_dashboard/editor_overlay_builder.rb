@@ -60,7 +60,7 @@ module MeetingDashboard
           u = a.user
           next unless u
 
-          { "id" => u.id, "name" => u.full_name }
+          { "id" => u.id, "name" => u.full_name, "assignment_id" => a.id }
         end.compact.uniq { |h| h["id"] }
 
         res = resolution_by_snap_id[snap.id]

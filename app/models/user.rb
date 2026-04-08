@@ -10,6 +10,7 @@ class User < ApplicationRecord
   has_many :final_review_tasks, class_name: 'Task', foreign_key: 'final_reviewer_id'   #change
   has_many :comments
   has_many :notifications, foreign_key: 'recipient_id'
+  has_many :meeting_pack_notifications, dependent: :destroy
   has_many :assigned_action_nodes, class_name: 'ActionNode', foreign_key: 'reviewer_id'
   has_many :recorded_review_date_extension_events,
            class_name: 'ReviewDateExtensionEvent',

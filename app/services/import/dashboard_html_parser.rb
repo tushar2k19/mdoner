@@ -25,10 +25,9 @@ module Import
         tds = tr.xpath('./td')
         next if tds.empty?
 
-        sn_text = tds[header_map.sn]&.text.to_s.strip
-        next unless sn_text.match?(/\A\d+\z/)
+        sn = extract_sn(tds[header_map.sn])
+        next unless sn
 
-        sn = sn_text.to_i
         sector = Import::HtmlSanitizer.text(tds[header_map.sector]&.inner_html)
         description = Import::HtmlSanitizer.text(tds[header_map.description]&.inner_html)
         responsibility = Import::HtmlSanitizer.text(tds[header_map.responsibility]&.inner_html)
@@ -63,14 +62,15 @@ module Import
     def header_indices_for(table)
       header_row = table.css('tr').find do |tr|
         text = tr.text.gsub(/\s+/, ' ').strip.downcase
-        text.include?('sn') && text.include?('sector') && text.include?('description') && text.include?('action') && text.include?('responsibility')
+        has_sn_like = text.match?(/\b(s\.?\s*i\.?|s\.?\s*n\.?|sl\.?\s*no\.?)\b/)
+        has_sn_like && text.include?('sector') && text.include?('description') && text.include?('action') && text.include?('responsibility')
       end
       return nil unless header_row
 
       cells = header_row.css('th,td').to_a
       idx = ->(re) { cells.find_index { |c| c.text.to_s.gsub(/\s+/, ' ').strip.downcase.match?(re) } }
 
-      sn = idx.call(/\A(sn|s\.?n\.?)\z/)
+      sn = idx.call(/\A(sn|s\.?\s*n\.?|si|s\.?\s*i\.?|sl\.?\s*no\.?)\z/)
       sector = idx.call(/sector/)
       description = idx.call(/description/)
       action = idx.call(/action/)
@@ -90,6 +90,25 @@ module Import
         responsibility: responsibility,
         review_date: review_date
       )
+    end
+
+    def extract_sn(cell)
+      return nil unless cell
+
+      # Common format: plain numeric text in the first column.
+      sn_text = cell.text.to_s.strip
+      return sn_text.to_i if sn_text.match?(/\A\d+\z/)
+
+      # LibreOffice variant: first column rendered as ordered list with empty <li>,
+      # where serial number is encoded in <ol start="N">.
+      ol = cell.at_css('ol')
+      return nil unless ol
+
+      start = ol['start'].to_s.strip
+      return start.to_i if start.match?(/\A\d+\z/)
+
+      # Default ordered list start is 1 when not specified.
+      ol.at_css('li') ? 1 : nil
     end
   end
 end

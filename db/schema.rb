@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_04_05_121500) do
+ActiveRecord::Schema[7.1].define(version: 2026_04_07_123000) do
   create_table "action_nodes", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.bigint "task_version_id", null: false
     t.bigint "parent_id"
@@ -56,6 +56,34 @@ ActiveRecord::Schema[7.1].define(version: 2026_04_05_121500) do
     t.index ["comment_trail_id"], name: "index_comments_on_comment_trail_id"
     t.index ["deleted_at"], name: "index_comments_on_deleted_at"
     t.index ["user_id"], name: "index_comments_on_user_id"
+  end
+
+  create_table "meeting_hub_reminder_cooldowns", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
+    t.bigint "editor_id", null: false
+    t.bigint "new_dashboard_version_id", null: false
+    t.string "stable_node_id", null: false
+    t.datetime "sent_at", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["editor_id", "new_dashboard_version_id", "stable_node_id"], name: "index_meeting_hub_reminder_cooldowns_unique", unique: true
+    t.index ["editor_id"], name: "index_meeting_hub_reminder_cooldowns_on_editor_id"
+    t.index ["new_dashboard_version_id"], name: "fk_rails_d687d0b210"
+  end
+
+  create_table "meeting_pack_notifications", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
+    t.bigint "user_id", null: false
+    t.string "kind", null: false
+    t.text "body", null: false
+    t.datetime "read_at"
+    t.json "payload"
+    t.string "dedupe_key"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.datetime "emailed_at"
+    t.index ["user_id", "created_at"], name: "index_meeting_pack_notifications_on_user_id_and_created_at", order: { created_at: :desc }
+    t.index ["user_id", "dedupe_key"], name: "index_meeting_pack_notifications_on_user_id_and_dedupe_key", unique: true
+    t.index ["user_id", "kind"], name: "index_meeting_pack_notifications_on_user_id_and_kind"
+    t.index ["user_id"], name: "index_meeting_pack_notifications_on_user_id"
   end
 
   create_table "new_action_nodes", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
@@ -286,7 +314,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_04_05_121500) do
 
   create_table "notifications", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.bigint "recipient_id", null: false
-    t.bigint "task_id", null: false
+    t.bigint "task_id"
     t.bigint "review_id"
     t.string "message", null: false
     t.boolean "read", default: false
@@ -294,7 +322,10 @@ ActiveRecord::Schema[7.1].define(version: 2026_04_05_121500) do
     t.datetime "deleted_at"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.json "payload"
+    t.bigint "new_task_id"
     t.index ["deleted_at"], name: "index_notifications_on_deleted_at"
+    t.index ["new_task_id"], name: "index_notifications_on_new_task_id"
     t.index ["recipient_id"], name: "index_notifications_on_recipient_id"
     t.index ["review_id"], name: "index_notifications_on_review_id"
     t.index ["task_id"], name: "index_notifications_on_task_id"
@@ -417,6 +448,9 @@ ActiveRecord::Schema[7.1].define(version: 2026_04_05_121500) do
   add_foreign_key "comments", "action_nodes", on_delete: :nullify
   add_foreign_key "comments", "comment_trails"
   add_foreign_key "comments", "users"
+  add_foreign_key "meeting_hub_reminder_cooldowns", "new_dashboard_versions"
+  add_foreign_key "meeting_hub_reminder_cooldowns", "users", column: "editor_id"
+  add_foreign_key "meeting_pack_notifications", "users"
   add_foreign_key "new_action_nodes", "new_action_nodes", column: "parent_id"
   add_foreign_key "new_action_nodes", "new_tasks"
   add_foreign_key "new_action_nodes", "users", column: "reviewer_id"
@@ -453,6 +487,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_04_05_121500) do
   add_foreign_key "new_task_tags", "users", column: "created_by_id"
   add_foreign_key "new_tasks", "users", column: "editor_id"
   add_foreign_key "new_tasks", "users", column: "reviewer_id"
+  add_foreign_key "notifications", "new_tasks"
   add_foreign_key "notifications", "reviews"
   add_foreign_key "notifications", "tasks"
   add_foreign_key "notifications", "users", column: "recipient_id"

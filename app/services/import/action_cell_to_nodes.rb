@@ -28,11 +28,7 @@ module Import
           position = (@flat.select { |n| n.parent_id.nil? }.map(&:position).max || 0)
           trailing_tables.each do |tbl|
             position += 1
-            html = begin
-              Import::HtmlTableToResizableTable.convert(tbl)
-            rescue Import::HtmlTableToResizableTable::UnsupportedTable
-              Import::HtmlSanitizer.sanitize_html(tbl.to_html)
-            end
+            html = Import::HtmlTableToResizableTable.convert_or_preserve(tbl)
             add_node(parent_id: nil, level: 1, list_style: 'decimal', node_type: 'rich_text', content: html, position: position)
           end
         end
@@ -90,12 +86,7 @@ module Import
 
       # Convert any embedded tables to resizable format.
       clone.css('table').each do |tbl|
-        begin
-          tbl.replace(Import::HtmlTableToResizableTable.convert(tbl))
-        rescue Import::HtmlTableToResizableTable::UnsupportedTable
-          # Fallback: keep a sanitized original table HTML.
-          tbl.replace(Import::HtmlSanitizer.sanitize_html(tbl.to_html))
-        end
+        tbl.replace(Import::HtmlTableToResizableTable.convert_or_preserve(tbl))
       end
 
       html = Import::HtmlSanitizer.sanitize_html(clone.inner_html).strip

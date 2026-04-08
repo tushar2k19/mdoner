@@ -57,12 +57,12 @@ class Comment < ApplicationRecord
                  comment_trail.review.task_version.all_reviewers -
                  [user]
     relevant_users.each do |recipient|
-      Notification.create(
-        recipient: recipient,
-        task: task,
-        review: comment_trail.review,
-        message: "New comment on task '#{task.description}' by #{user.full_name}",
-        notification_type: 'comment'
+      NotificationDispatcher.new.deliver(
+        recipient.id,
+        'comment',
+        "New comment on task '#{task.description}' by #{user.full_name}",
+        task_id: task.id,
+        review_id: comment_trail.review.id
       )
     end
   end

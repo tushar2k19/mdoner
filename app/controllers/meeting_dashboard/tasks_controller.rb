@@ -87,7 +87,7 @@ class MeetingDashboard::TasksController < ApplicationController
       end
       
       node.assign_attributes(
-        content: node_data['content'],
+        content: normalize_complex_table_content(node_data['content']),
         level: node_data['level'] || 1,
         list_style: node_data['list_style'] || 'decimal',
         node_type: node_data['node_type'] || 'point',
@@ -150,5 +150,12 @@ class MeetingDashboard::TasksController < ApplicationController
       end
     end
     flat_nodes
+  end
+
+  def normalize_complex_table_content(content)
+    raw = content.to_s
+    return raw unless raw.include?('<table')
+
+    Import::HtmlTableToResizableTable.normalize_complex_tables_in_html(raw)
   end
 end

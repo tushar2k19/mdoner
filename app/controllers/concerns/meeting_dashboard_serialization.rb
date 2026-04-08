@@ -86,6 +86,26 @@ module MeetingDashboardSerialization
     end
   end
 
+  # Tags at publish time are stored on the snapshot row as published_tag_ids (see MeetingDashboard::Publisher).
+  def snapshot_task_tags_for_json(st)
+    raw = st.read_attribute(:published_tag_ids)
+    ids =
+      case raw
+      when Array
+        raw.map { |x| Integer(x) rescue nil }.compact.uniq
+      when String
+        # Legacy / malformed JSON string — ignore
+        []
+      else
+        []
+      end
+    return [] if ids.empty?
+
+    Tag.where(id: ids).order(:name).pluck(:id, :name).map do |id, name|
+      { "id" => id, "name" => name }
+    end
+  end
+
   def serialize_meeting_snapshot_task(st, version)
     tree = st.node_tree
     calculate_display_counters(tree)
@@ -124,7 +144,7 @@ module MeetingDashboardSerialization
         "action_nodes" => action_nodes_json
       },
       "reviewer_info" => st.reviewer_info,
-      "tags" => [],
+      "tags" => snapshot_task_tags_for_json(st),
       "meeting_dashboard_version_id" => version.id,
       "target_meeting_date" => version.target_meeting_date,
       "published_at" => version.published_at,

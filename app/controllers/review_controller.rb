@@ -107,12 +107,12 @@ class ReviewController < ApplicationController
         @review.update!(status: 'pending')
         
         # Create notification for reviewer
-        Notification.create!(
-          recipient: @review.reviewer,
-          task: @review.task_version.task,
-          review: @review,
-          message: "Editor has made changes to task '#{@review.task_version.task.description}' - please re-review",
-          notification_type: 'editor_changes'
+        NotificationDispatcher.new.deliver(
+          @review.reviewer.id,
+          'editor_changes',
+          "Editor has made changes to task '#{@review.task_version.task.description}' - please re-review",
+          task_id: @review.task_version.task_id,
+          review_id: @review.id
         )
         
         render json: {
@@ -159,12 +159,12 @@ class ReviewController < ApplicationController
         task_version.task.update!(status: 'approved')
         
         # Create notification for editor
-        Notification.create!(
-          recipient: task_version.editor,
-          task: task_version.task,
-          review: @review,
-          message: "Your task '#{task_version.task.description}' has been fully approved by all reviewers",
-          notification_type: 'task_approved'
+        NotificationDispatcher.new.deliver(
+          task_version.editor.id,
+          'task_approved',
+          "Your task '#{task_version.task.description}' has been fully approved by all reviewers",
+          task_id: task_version.task_id,
+          review_id: @review.id
         )
         
         message = 'Review approved - Task fully approved by all reviewers'
@@ -173,12 +173,12 @@ class ReviewController < ApplicationController
         pending_count = all_reviews.count { |review| review.status == 'pending' }
         
         # Create notification for editor about partial approval
-        Notification.create!(
-          recipient: task_version.editor,
-          task: task_version.task,
-          review: nil,
-          message: "Your task '#{task_version.task.description}' has been partially approved (#{pending_count} reviews pending)",
-          notification_type: 'partial_approval'
+        NotificationDispatcher.new.deliver(
+          task_version.editor.id,
+          'partial_approval',
+          "Your task '#{task_version.task.description}' has been partially approved (#{pending_count} reviews pending)",
+          task_id: task_version.task_id,
+          review_id: nil
         )
         
         message = "Review approved - #{pending_count} review(s) still pending"
@@ -206,12 +206,12 @@ class ReviewController < ApplicationController
       @review.task_version.update!(status: 'draft')
       
       # Create notification for editor
-      Notification.create!(
-        recipient: @review.task_version.editor,
-        task: @review.task_version.task,
-        review: @review,
-        message: "Changes requested for task '#{@review.task_version.task.description}'",
-        notification_type: 'changes_requested'
+      NotificationDispatcher.new.deliver(
+        @review.task_version.editor.id,
+        'changes_requested',
+        "Changes requested for task '#{@review.task_version.task.description}'",
+        task_id: @review.task_version.task_id,
+        review_id: @review.id
       )
       
       render json: {
@@ -243,12 +243,12 @@ class ReviewController < ApplicationController
       )
       
       # Create notifications
-      Notification.create!(
-        recipient: new_reviewer,
-        task: @review.task_version.task,
-        review: new_review,
-        message: "Review forwarded to you for task '#{@review.task_version.task.description}'",
-        notification_type: 'review_forwarded'
+      NotificationDispatcher.new.deliver(
+        new_reviewer.id,
+        'review_forwarded',
+        "Review forwarded to you for task '#{@review.task_version.task.description}'",
+        task_id: @review.task_version.task_id,
+        review_id: new_review.id
       )
       
       render json: {
@@ -299,12 +299,12 @@ class ReviewController < ApplicationController
 
     @review.update!(last_reminder_sent_at: Time.current)
 
-    Notification.create!(
-      recipient: @review.reviewer,
-      task: task,
-      review: @review,
-      message: "Reminder: your review is still pending for '#{task.description}'",
-      notification_type: :review_reminder
+    NotificationDispatcher.new.deliver(
+      @review.reviewer.id,
+      :review_reminder,
+      "Reminder: your review is still pending for '#{task.description}'",
+      task_id: task.id,
+      review_id: @review.id
     )
 
     render json: {

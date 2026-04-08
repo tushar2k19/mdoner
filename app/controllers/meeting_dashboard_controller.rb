@@ -12,6 +12,7 @@ class MeetingDashboardController < ApplicationController
     publish reset_draft update_draft_settings
     create_assignment destroy_assignment reschedule
     resolve_dashboard_pack_node
+    hub_reminder
   ]
   # Overlay + comment index are read-only metadata for published packs; editors and reviewers need
   # them on Final (NewFinalDashboard). Mutations stay editor-only above.
@@ -19,6 +20,7 @@ class MeetingDashboardController < ApplicationController
     draft_editor_overlay comment_nodes
     dashboard_node_comments create_dashboard_node_comment
     update_dashboard_node_comment destroy_dashboard_node_comment
+    pack_node_status_explain
   ]
 
   # GET /meeting_dashboard/draft
@@ -54,14 +56,76 @@ class MeetingDashboardController < ApplicationController
 
   # GET /meeting_dashboard/meeting_dates
   def meeting_dates
-    rows = NewMeetingSchedule.order(meeting_date: :desc).map do |s|
-      {
-        meeting_date: s.meeting_date,
-        new_dashboard_version_id: s.current_new_dashboard_version_id,
-        set_at: s.set_at
-      }
+    schedules = NewMeetingSchedule.order(meeting_date: :desc).to_a
+    scheduled_by_version_id = schedules.each_with_object({}) do |s, acc|
+      next unless s.current_new_dashboard_version_id.present?
+      acc[s.current_new_dashboard_version_id] = s
     end
-    render json: { meeting_dates: rows }
+
+    # Include all published dashboard versions so users can view past snapshots even if a schedule
+    # pointer was never created for that version.
+    rows = NewDashboardVersion.order(published_at: :desc).map do |v|
+      s = scheduled_by_version_id[v.id]
+      meeting_date =
+        if s
+          s.meeting_date
+        else
+          v.target_meeting_date.presence || (v.published_at&.to_date)
+        end
+
+      {
+        meeting_date: meeting_date,
+        new_dashboard_version_id: v.id,
+        set_at: s&.set_at,
+        published_at: v.published_at,
+        source: s ? "schedule" : "version"
+      }
+    end.compact
+
+    rows.sort_by! do |r|
+      md =
+        if r[:meeting_date].is_a?(Date)
+          r[:meeting_date]
+        else
+          begin
+            Date.parse(r[:meeting_date].to_s)
+          rescue StandardError
+            Date.new(1970, 1, 1)
+          end
+        end
+
+      [md, (r[:published_at].presence || Time.at(0))]
+    end
+    rows.reverse!
+
+    # Collapse to latest snapshot per date (avoid multiple versions on same calendar day).
+    latest_by_date = {}
+    rows.each do |r|
+      md =
+        if r[:meeting_date].is_a?(Date)
+          r[:meeting_date]
+        else
+          begin
+            Date.parse(r[:meeting_date].to_s)
+          rescue StandardError
+            nil
+          end
+        end
+      next unless md
+
+      prev = latest_by_date[md]
+      if prev.nil? ||
+         (r[:published_at].to_i > prev[:published_at].to_i) ||
+         (r[:published_at].to_i == prev[:published_at].to_i && r[:new_dashboard_version_id].to_i > prev[:new_dashboard_version_id].to_i)
+        latest_by_date[md] = r
+      end
+    end
+
+    deduped = latest_by_date.keys.sort.reverse.map { |d| latest_by_date[d] }
+    # Keep published_at so clients can default to the most recently published pack (not max calendar meeting_date).
+    deduped.each { |r| r.delete(:source) }
+
+    render json: { meeting_dates: deduped }
   end
 
   # GET /meeting_dashboard/published?meeting_date=YYYY-MM-DD
@@ -182,6 +246,14 @@ class MeetingDashboardController < ApplicationController
     render json: MeetingDashboard::EditorOverlayBuilder.call(version)
   end
 
+  # GET /meeting_dashboard/pack_node_status_explain?new_dashboard_version_id=&new_task_id=
+  def pack_node_status_explain
+    version = NewDashboardVersion.find(params.require(:new_dashboard_version_id))
+    task = NewTask.find(params.require(:new_task_id))
+    res = MeetingDashboard::PackNodeStatusExplainer.call(version: version, task: task)
+    render json: res
+  end
+
   # GET /meeting_dashboard/comment_nodes?new_dashboard_version_id=
   def comment_nodes
     version = resolve_published_version_for_overlay
@@ -218,6 +290,7 @@ class MeetingDashboardController < ApplicationController
       user: current_user,
       body: body
     )
+    MeetingDashboard::NotifyDashboardNodeComment.call!(version: version, snap: snap, actor: current_user)
     render json: { success: true, comment: serialize_dashboard_node_comment(c) }
   rescue ArgumentError => e
     render json: { error: e.message }, status: :unprocessable_entity
@@ -259,16 +332,30 @@ class MeetingDashboardController < ApplicationController
     snap = find_snapshot_node!(version, params.require(:stable_node_id))
     user = User.find(params.require(:user_id))
 
-    assignment = NewDashboardAssignment.find_by(
+    existing = NewDashboardAssignment.find_by(
       new_dashboard_version_id: version.id,
       new_dashboard_snapshot_action_node_id: snap.id,
       user_id: user.id
     )
-    assignment ||= NewDashboardAssignment.create!(
+    if existing
+      render json: { success: true, assignment: serialize_assignment(existing) }
+      return
+    end
+
+    assignment = NewDashboardAssignment.create!(
       new_dashboard_version: version,
       new_dashboard_snapshot_action_node: snap,
       user: user
     )
+
+    MeetingDashboard::NotifyPackAssignment.call!(
+      version: version,
+      snap: snap,
+      assignment: assignment,
+      assignee: user,
+      actor: current_user
+    )
+
     render json: { success: true, assignment: serialize_assignment(assignment) }
   rescue ActiveRecord::RecordInvalid => e
     render json: { error: e.record.errors.full_messages.join(", ") }, status: :unprocessable_entity
@@ -278,6 +365,7 @@ class MeetingDashboardController < ApplicationController
   def destroy_assignment
     a = NewDashboardAssignment.find(params.require(:id))
     a.destroy!
+
     render json: { success: true }
   end
 
@@ -334,6 +422,29 @@ class MeetingDashboardController < ApplicationController
     }
   rescue ArgumentError => e
     render json: { error: e.message }, status: :unprocessable_entity
+  end
+
+  # POST /meeting_dashboard/hub_reminder
+  # params: new_dashboard_version_id, stable_node_id — editor-only; notifies assignees (R3).
+  def hub_reminder
+    version = NewDashboardVersion.find(params.require(:new_dashboard_version_id))
+    stable_node_id = params.require(:stable_node_id)
+
+    case MeetingDashboard::NotifyHubReminder.call!(
+      version: version,
+      stable_node_id: stable_node_id,
+      actor: current_user
+    )
+    when :ok
+      render json: { success: true }
+    when :cooldown
+      render json: {
+        error: "Please wait before sending another reminder",
+        retry_after_seconds: 600
+      }, status: :too_many_requests
+    when :no_assignees
+      render json: { error: "No assignees for this node" }, status: :unprocessable_entity
+    end
   end
 
   private

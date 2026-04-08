@@ -183,22 +183,22 @@ class Review < ApplicationRecord
   
   def send_notifications
     # Notify reviewer
-    Notification.create!(
-      recipient: reviewer,
-      task: task_version.task,
-      review: self,
-      message: "New review requested for #{task_version.task.description}",
-      notification_type: 'review_request'
+    NotificationDispatcher.new.deliver(
+      reviewer.id,
+      'review_request',
+      "New review requested for #{task_version.task.description}",
+      task_id: task_version.task_id,
+      review_id: id
     )
 
     # Notify editor if forwarded
     if status == 'forwarded'
-      Notification.create!(
-        recipient: task_version.editor,
-        task: task_version.task,
-        review: self,
-        message: "Your task has been forwarded to another reviewer",
-        notification_type: 'review_forwarded'
+      NotificationDispatcher.new.deliver(
+        task_version.editor.id,
+        'review_forwarded',
+        "Your task has been forwarded to another reviewer",
+        task_id: task_version.task_id,
+        review_id: id
       )
     end
   end
