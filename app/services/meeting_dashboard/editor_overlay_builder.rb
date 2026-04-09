@@ -15,8 +15,8 @@ module MeetingDashboard
     def call
       return { "new_dashboard_version_id" => nil, "nodes" => {}, "overlay_user_directory" => [] } unless @version
 
-      nodes = NewDashboardSnapshotActionNode.where(new_dashboard_version_id: @version.id)
-      node_ids = nodes.pluck(:id)
+      snapshot_nodes = NewDashboardSnapshotActionNode.where(new_dashboard_version_id: @version.id)
+      node_ids = snapshot_nodes.pluck(:id)
       return empty_payload if node_ids.empty?
 
       comment_counts = NewDashboardNodeComment.where(new_dashboard_version_id: @version.id)
@@ -52,7 +52,8 @@ module MeetingDashboard
                               .index_by(&:new_dashboard_snapshot_action_node_id)
 
       out = {}
-      nodes.find_each do |snap|
+      # Preload task once per batch; avoids N accesses to new_dashboard_snapshot_task (log spam + work).
+      snapshot_nodes.includes(:new_dashboard_snapshot_task).find_each do |snap|
         sid = snap.stable_node_id
         next if sid.blank?
 
